@@ -61,9 +61,9 @@ connect strains;
 create table strains (`Strain` INT(5) AUTO_INCREMENT UNIQUE KEY NOT NULL PRIMARY KEY,`Genotype` VARCHAR(999) NOT NULL, `Recipient` INT(5), `Donor` INT(5), `Comment` VARCHAR(999), `Signature` VARCHAR(50), `Created` TIMESTAMP DEFAULT NOW());
 create table users (`Id` tinyint(3) AUTO_INCREMENT UNIQUE KEY NOT NULL PRIMARY KEY,`Username` VARCHAR(20) NOT NULL, `Usertype` enum('User','Superuser') NOT NULL, `Password` VARCHAR(32) NOT NULL, `Signature` VARCHAR(20) NOT NULL, `FullName` VARCHAR(255) NOT NULL);
 connect strains;
-INSERT INTO `strains`.`users` (`Id`, `Username`, `Usertype`, `Password`,`Signature`,`FullName`) VALUES ('', 'username', 'Superuser', MD5('*******'),'signature',Full Name');
+INSERT INTO `strains`.`users` (`Id`, `Username`, `Usertype`, `Password`,`Signature`,`FullName`) VALUES ('', '*******', 'Superuser', MD5('*******'),'********','******');
 ```
-Any other users can be added through the web interface. Change the highlighted parameters to your actual user information. Note the `Usertype` parameter. A `Superuser` will have full access to create and edit strains, while a `User` can only search for strains.
+Any other users can be added through the web interface. Change the asterisks to your actual user information. Note the `Usertype` parameter. A `Superuser` will have full access to create and edit strains, while a `User` can only search for strains.
 
 ## Some useful MySQL commands 
 (be careful, make a backup of the existing database first):
@@ -81,7 +81,7 @@ ALTER TABLE strains AUTO_INCREMENT=1;
 ```
 
 ### Lost your login password? 
-I haven’t bothered to make any function for changing the password of an existing user. You’ll have to delete the user and make a new one with the same name. This should work for deleting a user (it can also be done through phpMyAdmin if it’s installed on the server):
+I haven’t bothered to make any function for changing the password of an existing user. Use phpMyAdmin (if it’s installed on the server) to change the password, or delete the user and make a new one with the same name. This should work for deleting a user:
 ```
 mysql –u root –p
 connect strains
