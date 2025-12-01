@@ -1,0 +1,491 @@
+/* variant.css (cleaned) — 2025-11-12 */
+*{
+	margin:0;padding:0;
+}
+
+body {
+	background: #eee url(images/body-bg.gif) top center repeat-y;
+	color: #555;
+	font: 76% tahoma, verdana, sans-serif;
+}
+
+a {
+	color: #286ea0;
+	text-decoration: none;
+}
+
+a:hover {
+	text-decoration: underline;
+}
+
+a img {
+	border: 0;
+}
+
+h1 {
+	font-size: 2.2em;
+	letter-spacing: -1px;
+	margin: 0 0 5px;
+	padding: 0;
+}
+
+h2 {
+	font-size: 1.6em;
+	margin: 0 0 12px;
+	padding: 0;
+}
+
+h3 {
+	font-size: 1.3em;
+	margin: 0 0 10px;
+	padding: 0;
+}
+
+p, ul {
+	line-height: 1.5em;
+	margin: 0 0 18px;
+	text-align: left;
+}
+
+ul,ol {
+	list-style: square;
+	margin: 0 0 15px 20px;
+}
+
+hr {
+	clear: both;
+	visibility: hidden;
+}
+
+table {
+	font-size: 1em;
+}
+
+/*
+Controls tables
+*/
+
+table.sample {
+
+    max-width: 940px
+    min-width: 940px
+	border-width: 1px;
+	border-spacing: 0px;
+	border-style: outset;
+	border-color: gray;
+	border-collapse: collapse;
+	background-color: rgb(255, 250, 250);
+        /*table-layout: width: 100px;*/
+}
+
+table.sample th {
+
+
+	border-width: thin;
+	padding: 3px;
+	border-style: inset;
+	border-color: gray;
+	background-color: white;
+	-moz-border-radius: ;
+}
+
+table.sample td {
+
+	border-width: thin;
+	padding: 3px;
+	border-style: inset;
+	border-color: gray;
+	background-color: white;
+	-moz-border-radius: ;
+}
+
+table.insert {
+	border: 0px solid black;
+	border-collapse: collapse;
+}
+
+table.insert th {
+	text-align: left;
+}
+
+table.insert td {
+	padding: 2px 0;
+}
+
+table.insert tr {
+	border-bottom: 0px solid black;
+}
+
+table.insert tr:nth-child(even) {
+    /*background-color: #CCC;*/
+}
+
+
+/*
+End controls tables
+*/
+
+
+#container {
+	background: #fff;
+	margin: 15px auto 0 auto;
+	width: 980px;
+}
+
+#toplinks {
+	width: 400px;
+	float: right;
+	margin: 0 15px 0 0;
+}
+
+#toplinks p {
+	text-align: right;
+}
+
+#logo{
+	width: 950px;
+	margin: 0 auto;
+	padding: 10px 0 0 25px;
+}
+
+#logo h1 a {
+	color: #777;
+	padding: 0;
+}
+
+#logo h1 a:hover {
+	text-decoration: none;
+}
+
+#logo p {
+	color: #555;
+	font-size: 1.4em;
+}
+
+#desc {
+	background: #555;
+	clear: both;
+	color: #eee;
+	margin: 0 0 15px;
+	padding: 15px 15px 2px 15px;
+}
+
+#desc a {
+	color: #eee;
+	text-decoration: underline;
+}
+
+#main {
+	float: left;
+	padding: 0;
+	margin: 0 0 10px 15px;
+	width: 940px;
+}
+
+#sidebar h2 {
+	font-size: 1.2em;
+	padding: 0 0 2px 0;
+	margin: 0 0 6px 0;
+	border-bottom: 1px solid #ccc;
+}
+
+#sidebar ul {
+	margin: 0 0 18px 0;
+	padding: 0;
+}
+
+#sidebar ul li {
+	list-style: none;
+	margin: 0 0 8px 0;
+	padding: 0;
+}
+
+#footer {
+	clear: both;
+	background: #555;
+	color: #eee;
+	margin: 10px 0 0;
+	padding: 15px;
+	text-align: left;
+}
+
+#footer a {
+	color: #eee;
+}
+
+#footer p {
+	margin: 0;
+	font-size: 0.9em;
+	font-weight: 700;
+}
+
+ul#navitab {
+	margin: 0;
+	padding: 0;
+}
+
+ul#navitab li {
+	display: block;
+	float: left;
+	margin: 0;
+	padding: 0;
+}
+
+ul#navitab li a {
+	background: url(images/corner.gif) no-repeat top right #eee;
+	border-left: 1px solid #ccc;
+	border-right: 2px solid #fff;
+	color: #555;
+	display: block;
+	height: 1.2em;
+	padding: 5px 16px 7px;
+	text-align: center;
+	text-decoration: none;
+	text-transform: uppercase;
+	white-space: nowrap;
+}
+
+ul#navitab li a:hover {
+	background: #777 url(images/corner.gif) no-repeat top right;
+	border-left: 1px solid #aaa;
+	color: #eee;
+}
+
+ul#navitab li a.current {
+	background: #555 url(images/corner.gif) no-repeat top right;
+	border-left: 1px solid #555;
+	color: #eee;
+}
+
+#sidebar ul.sidelink {
+	margin:0 0 18px 0;
+}
+
+#sidebar ul.sidelink li {
+	list-style: none;
+	margin: 0;
+}
+
+#sidebar ul.sidelink li a{
+	background: url(images/corner.gif) no-repeat top right #eee;
+	border-bottom: 1px solid #ccc;
+	border-left: 1px solid #ccc;
+	color: #555;
+	display: block;
+	margin: 0 0 3px;
+	padding: 3px 0 2px 5px;
+	text-align: left;
+	text-decoration: none;
+	text-transform: uppercase;
+}
+
+#sidebar ul.sidelink li a:hover {
+	background: url(images/corner.gif) no-repeat top right #777;
+	border-bottom: 1px solid #333;
+	border-left: 1px solid #333;
+	color: #eee;
+	text-decoration: none;
+}
+
+#sidebar ul.sidelink ul {
+	font-size: 0.9em;
+	margin: 0;
+	padding: 0;
+}
+
+#sidebar ul.sidelink ul li a {
+	margin:0 0 2px 10px;
+	padding: 2px 0 1px 5px
+}
+
+.splitleft {
+	width: 48%;
+	float: left;
+}
+
+.block {
+	background: #eee url(images/corner.gif) no-repeat top right;
+	padding: 15px;
+	border-bottom: 1px solid #ccc;
+	border-left: 1px solid #ccc;
+}
+
+.hide {
+	display: none;
+}
+
+input.validation-fail, textarea.validation-fail {
+	border: 1px solid red;
+}
+
+p.validation-fail {
+	color: red;
+}
+
+.signup-form label {
+	display: inline-block;
+	width: 75px;
+	font-weight: bold;
+}
+
+.signup-form .form-group input, .signup-form .form-group select {
+	width: 150px;
+}
+
+form .helptext {
+	font-style: italic;
+}
+
+.form-group {
+	padding: 4px 0;
+}
+
+.display-none {
+	display: none;
+}
+
+/* Flash message styles */
+.flash { margin: 12px 0; padding: 10px 14px; border-radius: 8px; border: 1px solid #ddd; font-weight: 600; }
+.flash-info    { background: #ebf8ff; border-color: #bee3f8; }
+
+/* === Merged from hotfix.css on 2025-11-12 === */
+/* ===== Reset our earlier experiments ===== */
+#container { display: block !important; }          /* no flex */
+
+/* ===== Header: logo left, toplinks right, TOP-aligned ===== */
+#logo {
+  float: left !important;
+  margin: 0 !important;
+  padding: 0 !important;
+}
+#toplinks {
+  float: right !important;
+  text-align: right !important;
+  margin: 0 !important;
+  padding: 0 !important;
+}
+
+/* ===== Nav: sits directly under header, tight with #desc ===== */
+#navitab {
+  clear: both !important;          /* below header floats */
+  display: block !important;
+  margin: 6px 0 0 0 !important;    /* no bottom gap */
+  padding: 0 !important;
+  list-style: none !important;
+}
+#navitab > li {
+  display: inline-block !important;
+  margin: 0 6px 0 0 !important;    /* small gap between tabs */
+  padding: 0 !important;
+}
+#navitab > li > a {
+  display: inline-block !important;
+  padding: 3px 8px !important;     /* tighter tabs */
+  line-height: 1.2 !important;
+  white-space: nowrap !important;
+}
+
+/* ===== Intro (desc): immediately under nav, no gap ===== */
+#desc {
+  clear: both !important;
+  margin: 0 !important;            /* tight to nav */
+  position: relative !important;
+}
+#desc .splitleft,
+#desc .splitright {
+  float: none !important;          /* avoid sliding under tabs */
+  width: auto !important;
+  margin: 0 !important;
+  position: static !important;
+}
+
+/* ===== Main: forms/results area with a bit of padding ===== */
+#main {
+  clear: both !important;
+  margin-top: 10px !important;
+  padding: 8px 12px !important;
+}
+
+/* Optional: padding for other blocks inside container (skip header/nav) */
+#container > :not(#logo):not(#toplinks):not(#navitab) {
+  padding-left: 12px !important;
+  padding-right: 12px !important;
+}
+
+/* ===== Footer last, separated a bit ===== */
+#footer {
+  clear: both !important;
+  margin-top: 12px !important;
+}
+
+/* ===== Safety: no overlay elements ===== */
+#js-disabled { display: none !important; }
+.pw-upgrade-wrap, .pw-upgrade-wrap * { position: static !important; z-index: auto !important; }
+/* Neutralize previous float/flex rules on header when inside table */
+#headerbar #logo,
+#headerbar #toplinks {
+  float: none !important;
+  display: table-cell !important;
+  position: static !important;
+  z-index: auto !important;
+  margin: 0 !important;
+}
+
+/* Make sure the nav sits just below the header */
+#navitab { clear: both !important; margin-top: 6px !important; }
+
+/* Keep #desc tight to the tabs */
+#desc { margin-top: 0 !important; }
+
+/* Headerbar: two columns aligned at the TOP, spaced apart */
+#headerbar {
+  display: flex !important;
+  justify-content: space-between !important;
+  align-items: flex-start !important; /* align to top edge */
+  gap: 12px !important;
+  margin: 0 12px 6px 12px !important;
+}
+
+/* Kill legacy floats/positions that might fight the header */
+#headerbar #logo,
+#headerbar #toplinks {
+  float: none !important;
+  position: static !important;
+  margin: 0 !important;
+  padding: 0 !important;
+}
+
+/* Right-align the text block; keep it compact */
+#headerbar #toplinks { text-align: right !important; }
+#headerbar #toplinks p { margin: 0 !important; }
+
+/* Keep nav right under header */
+#navitab { clear: both !important; margin: 6px 12px 0 12px !important; }
+
+/* Keep #desc tight under tabs */
+#desc { margin: 0 12px !important; }
+
+/* Ensure main content has some breathing room */
+#main { margin: 10px 12px 0 12px !important; }
+
+/* Safety: disable overlays */
+#js-disabled { display: none !important; }
+.pw-upgrade-wrap, .pw-upgrade-wrap * { position: static !important; z-index: auto !important; }
+
+#headerbar { align-items: baseline !important; }
+#logo h1 { margin: 0px 0px 0px 0px !important; } /* small nudge if needed */
+/* Header: left logo (auto), right toplinks (takes remaining space) */
+#headerbar { display: flex !important; align-items: flex-start !important; gap: 12px !important; }
+
+/* Logo uses only what it needs */
+#headerbar #logo { flex: 0 1 auto !important; }
+
+/* Toplinks expands; keeps lines from breaking due to narrow box */
+#headerbar #toplinks {
+  flex: 1 1 50% !important;     /* grow and take at least half */
+  text-align: right !important;
+  white-space: normal !important; /* keep <br> line breaks; allow long lines */
+  min-width: 380px !important;    /* tweak to your taste */
+}
+#headerbar #toplinks p { margin: 0 !important; }
+#toplinks { max-width: none !important; width: auto !important; }
