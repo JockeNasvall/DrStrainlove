@@ -7,8 +7,8 @@
 
 
 
-$dbuser = 'root';
-$dbpassword = '1Lovestrains';
+$dbuser = 'USERNAME';
+$dbpassword = 'PASSWORD';
 $dbname = 'strains';
 $hostname = 'localhost';
 $port = 3306;
