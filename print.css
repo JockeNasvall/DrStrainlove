@@ -1,0 +1,95 @@
+@media print
+{
+    body{
+    	background: #FFFFFF url(images/body-bg.gif) top center repeat-y;
+    	color: #000000;
+    	font: 65% tahoma, verdana, sans-serif;
+    }
+
+    @page {
+    /* Browser default, customizable by the user in the print dialogue. */
+    size: auto;
+
+    /* Default, but explicitly in portrait or landscape orientation and not user-
+    customizable. In my instance of Chrome, this is a vertical or horizontal letter
+    format, but you might find something different depending on your locale. */
+    size: portrait;
+    size: landscape;
+
+    /* Predefined format, can be coupled with an orientation. */
+    size: letter;
+    size: A4;
+    size: A4 landscape;
+
+    /* Custom, with same width and height. */
+    size: 10cm;
+    size: 420px;
+    size: 6in;
+
+    /* Different width and height. */
+    size: 640px 360px;
+    size: 20cm 15cm;
+}
+
+    table {
+    	page-break-inside: auto;
+    	width: 100%;
+      font-size: 1em;
+    }
+
+    tr    {
+    	page-break-inside: avoid;
+    	page-break-after: auto
+    }
+
+    thead {
+    	display: table-header-group
+    }
+
+    tfoot {
+    	display: table-footer-group
+    }
+
+    .noPrint {
+    	display: none;
+    }
+
+    .landscape {
+	    width: 100%;
+	    height: 100%;
+	    margin: 0% 0% 0% 0%;
+	    filter: progid:DXImageTransform.Microsoft.BasicImage(Rotation=1);
+	}
+
+	table.sample {
+	    page-break-inside: auto;
+		border-width: thin;
+		border-spacing: 0px;
+		border-style: outset;
+		border-color: #000000;
+		border-collapse: collapse;
+		background-color: #FFFFFF;
+	}
+
+	table.sample tr {
+		page-break-inside: avoid;
+		page-break-after: auto;
+	}
+
+	table.sample th {
+		border-width: thin;
+		padding: 3px;
+		border-style: inset;
+		border-color: #000000;
+		background-color: #FFFFFF;
+		-moz-border-radius: ;
+	}
+	table.sample td {
+		border-width: thin;
+		padding: 3px;
+		border-style: inset;
+		border-color: #000000;
+		background-color: #FFFFFF;
+		-moz-border-radius: ;
+	}
+}
