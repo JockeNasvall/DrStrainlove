@@ -52,18 +52,6 @@ if(isset($_GET['logout']) && $_GET['logout'] == '1') {
 	exit; // Add exit after header redirect
 }
 
-// Connect to the database or die
-//include("db.php");
-
-// Include all functions
-//include("functions.php");
-
-// Include all actions for forms
-//include("actions.php");
-
-// Troubleshooting
-
-
 ?>
 
 

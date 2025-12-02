@@ -46,6 +46,7 @@ In  strainlove/
 - insert.php - contains the functions for adding new strains
 - lib/input_sanitize.php - numeric clamping helpers used by actions.php and search.php for strain/ID inputs
 - lib/search_filters.php - legacy search SQL helper (currently unused; removing it does not change behavior)
+- lib/search_filters.php - shared helper loaded by index.php to build search SQL safely
 - js
 - login.php - A simple user verification system. Probably not very safe.
 - misc.html
