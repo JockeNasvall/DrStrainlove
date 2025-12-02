@@ -33,6 +33,7 @@ if (file_exists(__DIR__ . '/db.php')) {
 // Ensure application logic is loaded so POST actions (search/reset/store/etc.) are processed.
 require_once __DIR__ . '/functions.php';
 require_once __DIR__ . '/actions.php';
+require_once __DIR__ . '/permissions.php';
 // Load search helper moved to lib/ (if present)
 @require_once __DIR__ . '/lib/search_filters.php';
 // ===== DEBUG: request probe (add &debug=1 to the URL) =====
@@ -158,15 +159,17 @@ if(isset($_GET['logout']) && $_GET['logout'] == '1') {
 				<ul id="navitab" style="position:relative; z-index:10; clear:both; margin-bottom:8px;">
 									<li><a class="<?php echo (isset($_GET['mode']) && $_GET['mode'] == 'search' ? 'current' : NULL); // Simplified: Search tab is active if mode is 'search' ?>" href="index.php?mode=search&amp;type=word">Search strains</a></li>	
 
-					<?php if(isset($_SESSION['Usertype']) && $_SESSION['Usertype'] == 'Superuser'){ ?>
-						<?php
-							// Mark Add tab active for both the add form and the "add results" view (mode=add3)
-							$add_modes = ['add','add3'];
-							$add_active = (isset($_GET['mode']) && in_array($_GET['mode'], $add_modes, true)) ? 'current' : NULL;
-						?>
-						<li><a class="<?php echo $add_active; ?>" href="index.php?mode=add&amp;Line=<?php echo isset($_SESSION['Line']) ? $_SESSION['Line'] : 1;?>">Add strain(s)</a></li>
-						<li><a class="<?php echo (isset($_GET['mode']) && $_GET['mode'] == 'addUser' ? 'current' : NULL); ?>" href="index.php?mode=addUser">User management</a></li>
-					<?php } ?>
+                                        <?php if (can('add_strains')) { ?>
+                                                <?php
+                                                        // Mark Add tab active for both the add form and the "add results" view (mode=add3)
+                                                        $add_modes = ['add','add3'];
+                                                        $add_active = (isset($_GET['mode']) && in_array($_GET['mode'], $add_modes, true)) ? 'current' : NULL;
+                                                ?>
+                                                <li><a class="<?php echo $add_active; ?>" href="index.php?mode=add&amp;Line=<?php echo isset($_SESSION['Line']) ? $_SESSION['Line'] : 1;?>">Add strain(s)</a></li>
+                                        <?php } ?>
+                                        <?php if (can('manage_users')) { ?>
+                                                <li><a class="<?php echo (isset($_GET['mode']) && $_GET['mode'] == 'addUser' ? 'current' : NULL); ?>" href="index.php?mode=addUser">User management</a></li>
+                                        <?php } ?>
 					<li><a class="<?php echo (isset($_GET['mode']) && $_GET['mode'] == 'guidelines' ? 'current' : NULL); ?>" href="index.php?mode=guidelines">Guidelines</a></li>
 					<li><a class="<?php echo (isset($_GET['mode']) && $_GET['mode'] == 'popStrains' ? 'current' : NULL); ?>" href="index.php?mode=popStrains">Popular Strains</a></li>
 					<li><a class="<?php echo (isset($_GET['mode']) && $_GET['mode'] == 'misc' ? 'current' : NULL); ?>" href="index.php?mode=misc">Misc. lab related stuff</a></li>
@@ -360,34 +363,54 @@ if (!empty($__DEBUG)) {
 					elseif (($value == 'myList') && isset($_POST['show'])) {
 						include("search1.php"); // actions.php prepares list, search1 displays it
 					}
-					elseif (($value == 'myList') && isset($_POST['edit'])) {
-						include("edit.php"); // actions.php prepares list, edit.php uses it
-					}
+                                        elseif (($value == 'myList') && isset($_POST['edit'])) {
+                                                if (can('edit_strains')) {
+                                                    include("edit.php"); // actions.php prepares list, edit.php uses it
+                                                } else {
+                                                    echo "<span style='color:red;font-weight:bold;'>You do not have permission to edit strains.</span>";
+                                                }
+                                        }
 					elseif (($value == 'myList') && isset($_POST['print'])) {
 						include("print.php"); // actions.php prepares list, print.php uses it
 					}
-					elseif ($value == 'add') {
-						// If this request was triggered by a just-completed add (show=add3 or recent_add present),
-						// show the add-results view instead of the form.
-						// Synthesize mode=add3 in the request so search1.php takes the add3 branch.
-						if ((isset($_GET['show']) && $_GET['show'] === 'add3') || (!empty($_SESSION['recent_add']) && is_array($_SESSION['recent_add']))) {
-						    // Ensure search1.php sees mode=add3 (it checks $_GET['mode'] / $_REQUEST['mode'])
-						    $_GET['mode'] = 'add3';
-						    $_REQUEST['mode'] = 'add3';
-						    include("search1.php"); // Show newly added rows in the Add tab (form removed)
-						} else {
-						    include("insert.php");  // Normal add form
-						}
-					}
-					elseif ($value == 'add3') {
+                                        elseif ($value == 'add') {
+                                                // If this request was triggered by a just-completed add (show=add3 or recent_add present),
+                                                // show the add-results view instead of the form.
+                                                // Synthesize mode=add3 in the request so search1.php takes the add3 branch.
+                                                if ((isset($_GET['show']) && $_GET['show'] === 'add3') || (!empty($_SESSION['recent_add']) && is_array($_SESSION['recent_add']))) {
+                                                    // Ensure search1.php sees mode=add3 (it checks $_GET['mode'] / $_REQUEST['mode'])
+                                                    $_GET['mode'] = 'add3';
+                                                    $_REQUEST['mode'] = 'add3';
+                                                    if (can('add_strains')) {
+                                                        include("search1.php"); // Show newly added rows in the Add tab (form removed)
+                                                    } else {
+                                                        echo "<span style='color:red;font-weight:bold;'>You do not have permission to add strains.</span>";
+                                                    }
+                                                } else {
+                                                    if (can('add_strains')) {
+                                                        include("insert.php");  // Normal add form
+                                                    } else {
+                                                        echo "<span style='color:red;font-weight:bold;'>You do not have permission to add strains.</span>";
+                                                    }
+                                                }
+                                        }
+                                        elseif ($value == 'add3') {
                         // Always show the add-results view for mode=add3.
                         // index.php already copies any minNum/maxNum from GET into the session earlier,
                         // so search1.php will have the numeric range it needs to render the table.
-                        include("search1.php");
+                        if (can('add_strains')) {
+                            include("search1.php");
+                        } else {
+                            echo "<span style='color:red;font-weight:bold;'>You do not have permission to add strains.</span>";
+                        }
                     }
-					elseif ($value == 'edit2') {
-						include("search1.php"); // Shows edited strains for confirmation
-					}
+                                        elseif ($value == 'edit2') {
+                                                if (can('edit_strains')) {
+                                                    include("search1.php"); // Shows edited strains for confirmation
+                                                } else {
+                                                    echo "<span style='color:red;font-weight:bold;'>You do not have permission to edit strains.</span>";
+                                                }
+                                        }
 					elseif ($value == 'pedigree') {
 						include("search1.php");
 					}
@@ -398,11 +421,15 @@ if (!empty($__DEBUG)) {
 						include('upgrade_password.php');
 						exit;
 					}
-					elseif ((($value == 'addUser') || ($value == 'manageUsers')) && (!isset($_GET['save']) || $_GET['save'] != 'success')) {
-						include("signup.php");
-						exit; // prevent fall-through
-						exit; // prevent fall-through
-					}
+                                        elseif ((($value == 'addUser') || ($value == 'manageUsers')) && (!isset($_GET['save']) || $_GET['save'] != 'success')) {
+                                                if (can('manage_users')) {
+                                                    include("signup.php");
+                                                    exit; // prevent fall-through
+                                                } else {
+                                                    echo "<span style='color:red;font-weight:bold;'>You do not have permission to manage users.</span>";
+                                                }
+                                                exit; // prevent fall-through
+                                        }
 					elseif ($value == 'guidelines') {
 						include("guidelines.htm");
 					}
