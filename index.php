@@ -34,7 +34,6 @@ if (file_exists(__DIR__ . '/db.php')) {
 require_once __DIR__ . '/functions.php';
 require_once __DIR__ . '/actions.php';
 require_once __DIR__ . '/permissions.php';
-require_once __DIR__ . '/lib/search_filters.php';
 // ===== DEBUG: request probe (add &debug=1 to the URL) =====
 if ($__DEBUG) {
     echo '<div style="margin:12px 0;padding:10px;border:1px dashed #999;border-radius:8px;background:#f9f9f9">';
@@ -52,18 +51,6 @@ if(isset($_GET['logout']) && $_GET['logout'] == '1') {
 	header('Location: index.php');
 	exit; // Add exit after header redirect
 }
-
-// Connect to the database or die
-//include("db.php");
-
-// Include all functions
-//include("functions.php");
-
-// Include all actions for forms
-//include("actions.php");
-
-// Troubleshooting
-
 
 ?>
 
@@ -127,7 +114,7 @@ if(isset($_GET['logout']) && $_GET['logout'] == '1') {
 			<!-- HEADERBAR: logo (left) + toplinks (right) -->
 <div id="headerbar">
   <div id="logo" class="noPrint">
-    <h1 style="margin:0;"><a href="index.php">Dr Strainlove</a></h1>
+    <h1 style="margin:0;"><a href="index.php">Dr Strainlove v2.0</a></h1>
     <p style="margin:2px 0 0 0;">Powered by <i>Salmonella</i> genetics!</p>
   </div>
 
@@ -457,7 +444,7 @@ if (!empty($__DEBUG)) {
 				</div>
 			</div> <div class='noPrint'>
 				<div id="footer">
-					<p>2011-2025 &middot; Joakim Näsvall &middot; This page was last updated 2025-11-11 by Joakim Näsvall and ChatGPT (some added magic, major code cleanup, migration to php 8 and finally runs as a real LAMP server!).</p>
+					<p>2011-2025 &middot; Joakim Näsvall &middot; This page was last updated 2025-12-02 by Joakim Näsvall and ChatGPT (some added magic, major code cleanup, migration to php 8 and finally runs as a real LAMP server!).</p>
 				</div>
 			</div>
 		</div> </body>

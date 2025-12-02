@@ -45,7 +45,6 @@ In  strainlove/
 - index.php - generates the web page
 - insert.php - contains the functions for adding new strains
 - lib/input_sanitize.php - numeric clamping helpers used by actions.php and search.php for strain/ID inputs
-- lib/search_filters.php - helper for building the strain search SQL; included by index.php for compatibility with existing search workflows
 - js
 - login.php - A simple user verification system. Probably not very safe.
 - misc.html
