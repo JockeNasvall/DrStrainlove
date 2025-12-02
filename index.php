@@ -34,8 +34,6 @@ if (file_exists(__DIR__ . '/db.php')) {
 require_once __DIR__ . '/functions.php';
 require_once __DIR__ . '/actions.php';
 require_once __DIR__ . '/permissions.php';
-// Load search helper moved to lib/ (if present)
-@require_once __DIR__ . '/lib/search_filters.php';
 // ===== DEBUG: request probe (add &debug=1 to the URL) =====
 if ($__DEBUG) {
     echo '<div style="margin:12px 0;padding:10px;border:1px dashed #999;border-radius:8px;background:#f9f9f9">';
