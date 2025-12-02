@@ -65,7 +65,7 @@ if(isset($_GET['logout']) && $_GET['logout'] == '1') {
 		<script type="text/javascript" src="js/script.js" ></script>
 
 
-		<title>Dr Strainlove v2.0</title>
+		<title>Dr Strainlove</title>
 	<style id="hotfix-js-disabled">
   #js-disabled { display: none !important; }
 </style>
@@ -114,7 +114,7 @@ if(isset($_GET['logout']) && $_GET['logout'] == '1') {
 			<!-- HEADERBAR: logo (left) + toplinks (right) -->
 <div id="headerbar">
   <div id="logo" class="noPrint">
-    <h1 style="margin:0;"><a href="index.php">Dr Strainlove</a></h1>
+    <h1 style="margin:0;"><a href="index.php">Dr Strainlove v2.0</a></h1>
     <p style="margin:2px 0 0 0;">Powered by <i>Salmonella</i> genetics!</p>
   </div>
 
