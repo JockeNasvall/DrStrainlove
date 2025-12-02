@@ -6,9 +6,29 @@
 
 if (session_status() !== PHP_SESSION_ACTIVE) { session_start(); }
 
+// Preserve debug flag from GET/POST so it survives POST+redirect
+$debugParam = (isset($_REQUEST['debug']) && $_REQUEST['debug'] === '1') ? '1' : '';
+
 // Ensure DB handle is available
 if (!isset($dbh) || !($dbh instanceof PDO)) {
     @require_once __DIR__ . '/db.php';
+}
+
+// Resolve users table name (supports 'users' or 'Users')
+$usersTable = 'users';
+try {
+    $hasLower = (bool)@$dbh->query("SHOW TABLES LIKE 'users'")->fetchColumn();
+    $hasUpper = (bool)@$dbh->query("SHOW TABLES LIKE 'Users'")->fetchColumn();
+    if ($hasLower) {
+        $usersTable = 'users';
+    } elseif ($hasUpper) {
+        $usersTable = 'Users';
+    } else {
+        $usersTable = 'users';
+    }
+} catch (Throwable $t) {
+    // best-effort fallback, we'll try to continue and surface any DB error to the user
+    $usersTable = 'users';
 }
 
 // Guard: must be logged in and have a username in session
@@ -22,7 +42,7 @@ if (!$logged_in || !$username) {
 // Fetch stored password for this user
 $storedRaw = null;
 try {
-    $stmt = $dbh->prepare("SELECT `Password` FROM `users` WHERE `Username` = :u LIMIT 1");
+    $stmt = $dbh->prepare("SELECT `Password` FROM `{$usersTable}` WHERE `Username` = :u LIMIT 1");
     $stmt->bindParam(':u', $username);
     $stmt->execute();
     $row = $stmt->fetch(PDO::FETCH_ASSOC);
@@ -72,21 +92,38 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         // Hash and save new password
         $new_hash = password_hash($new1, PASSWORD_DEFAULT);
         try {
-            $upd = $dbh->prepare("UPDATE `users` SET `Password` = :p WHERE `Username` = :u LIMIT 1");
-            $upd->bindParam(':p', $new_hash);
-            $upd->bindParam(':u', $username);
+            $upd = $dbh->prepare("UPDATE `{$usersTable}` SET `Password` = :p WHERE `Username` = :u LIMIT 1");
+            $upd->bindValue(':p', $new_hash, PDO::PARAM_STR);
+            $upd->bindValue(':u', $username, PDO::PARAM_STR);
             $upd->execute();
+            $affected = $upd->rowCount();
 
-            // Clear upgrade flag then force fresh login
+            // Clear upgrade flag and sign the user out but keep session for feedback
             unset($_SESSION['needs_pw_upgrade']);
-            if (session_status() === PHP_SESSION_ACTIVE) {
-                session_destroy();
+            // Clear login keys to force a fresh login
+            unset($_SESSION['login'], $_SESSION['Username'], $_SESSION['user'], $_SESSION['Usertype'], $_SESSION['Signature']);
+
+            // Provide a feedback message (will survive because we do not destroy session)
+            $_SESSION['feedback_type'] = 'success';
+            if ($affected > 0) {
+                $_SESSION['feedback_message'] = 'Password updated. Please log in with your new password.';
+            } else {
+                // rowCount may be 0 if the value was identical (unlikely) — still treat as success
+                $_SESSION['feedback_message'] = 'Password updated (no rows reported changed). Please log in with your new password.';
             }
-            header('Location: index.php?mode=login');
+
+            // Preserve debug flag on redirect if present
+            $loc = 'index.php?mode=login' . ($debugParam === '1' ? '&debug=1' : '');
+            header('Location: ' . $loc);
             exit;
         } catch (Throwable $t) {
             error_log('[UPGRADE_PW] Update error: '.$t->getMessage());
-            $errs[] = 'Failed to update password due to a server error.';
+            // When debug requested, show DB error to user; otherwise provide generic message
+            if (!empty($_REQUEST['debug']) && ini_get('display_errors')) {
+                $errs[] = 'Failed to update password due to a server error: ' . $t->getMessage();
+            } else {
+                $errs[] = 'Failed to update password due to a server error.';
+            }
         }
     }
 }
@@ -112,6 +149,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 <?php endif; ?>
 
 <form method="post" action="index.php?mode=changePassword" autocomplete="off">
+  <!-- preserve debug flag across POST -->
+  <input type="hidden" name="debug" value="<?php echo htmlspecialchars($debugParam, ENT_QUOTES, 'UTF-8'); ?>">
   <?php if ($require_current): ?>
     <p>
       <label>Current password<br>
@@ -131,7 +170,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
   </p>
   <p>
     <button type="submit">Update password</button>
-    <a href="index.php?mode=logout" style="margin-left:12px;">Cancel</a>
+    <a href="index.php?mode=logout<?php echo ($debugParam === '1') ? '&debug=1' : ''; ?>" style="margin-left:12px;">Cancel</a>
   </p>
 </form>
 

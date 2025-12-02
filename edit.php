@@ -103,7 +103,11 @@ if($_SESSION['Usertype'] == 'Superuser') {
                 echo "<tbody>"; // Add tbody
 
     			echo "<form name='strainstoupdate' method='post' action='index.php?mode=edit2'>";
-    			    echo "<input type='hidden' name='form-type' id='form-type' value='edit'>";
+    				// Preserve debug flag across POST so redirects can include it
+    				$__debug_val = htmlspecialchars($_REQUEST['debug'] ?? '', ENT_QUOTES, 'UTF-8');
+    				echo "<input type='hidden' name='debug' value='" . $__debug_val . "'>";
+
+    				echo "<input type='hidden' name='form-type' id='form-type' value='edit'>";
     				echo "<input type='submit' title='Save the changes' name='save' value='save'>";
 
     				$strainIndex = 0;
@@ -125,26 +129,25 @@ if($_SESSION['Usertype'] == 'Superuser') {
     						echo "</td>";
 
     						echo "<td>";
+    						// Parental (Recipient)
     						echo "<div>Parental</br>(Recipient):</div>";
-    						if ($row['Recipient'] == "0") {
-    							echo "";
-    							echo "DA<input type='text' size=5 name='Recipient[" . $strainIndex . "]' value=''>\n";
+    						$recipientId = (int)($row['Recipient'] ?? 0);
+    						if ($recipientId > 0) {
+    							echo "<a href='index.php?mode=myNum&myNum=" . $recipientId . "' title='View DA" . $recipientId . " in a new tab'>DA" . $recipientId . "</a><br>";
+    							echo "<input type='text' size=5 name='Recipient[" . $strainIndex . "]' value='" . $recipientId . "'>\n";
     						} else {
-    							echo "<a href=index.php?mode=myNum&myNum=" . $row['Recipient'] . " title='View DA" . $row['Recipient'] . " in a new tab'>DA" . $row['Recipient'] . "</a><br>";
-    							echo "DA<input type='text' size=5 name='Recipient[" . $strainIndex . "]' value='" . $row['Recipient'] . "'>\n";
-
+    							echo "<input type='text' size=5 name='Recipient[" . $strainIndex . "]' value=''>\n";
     						}
     						echo "<br><br>";
-    							echo "<div>Donor:</div>";
-    							if ($row['Donor'] == "0") {
-    							  echo "";
-    								echo "DA<input type='text' size=5 name='Donor[" . $strainIndex . "]' value=''>\n<br><br>";
-    							} else {
-    								echo "<a href=index.php?mode=myNum&myNum=" . $row['Donor'] . " title='View DA" . $row['Donor'] . " in a new tab'>DA" . $row['Donor'] . "</a><br>";
-    								echo "DA<input type='text' size=5 name='Donor[" . $strainIndex . "]' value='" . $row['Donor'] . "'>\n";
-    							}
-
-
+    						// Donor
+    						echo "<div>Donor:</div>";
+    						$donorId = (int)($row['Donor'] ?? 0);
+    						if ($donorId > 0) {
+    							echo "<a href='index.php?mode=myNum&myNum=" . $donorId . "' title='View DA" . $donorId . " in a new tab'>DA" . $donorId . "</a><br>";
+    							echo "<input type='text' size=5 name='Donor[" . $strainIndex . "]' value='" . $donorId . "'>\n";
+    						} else {
+    							echo "<input type='text' size=5 name='Donor[" . $strainIndex . "]' value=''>\n<br><br>";
+    						}
     						echo "</td>";
 
     						echo "<td>";

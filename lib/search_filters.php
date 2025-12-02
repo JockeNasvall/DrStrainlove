@@ -56,4 +56,3 @@ function build_strain_search_sql(PDO $dbh, array $q): array {
 
     return [$sql, $params, $limit];
 }
-

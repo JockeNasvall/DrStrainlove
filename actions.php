@@ -1,5 +1,11 @@
 <?php declare(strict_types=1);
 require_once __DIR__ . '/lib/input_sanitize.php';
+// Ensure a session is active (actions rely on session)
+if (session_status() !== PHP_SESSION_ACTIVE) { session_start(); }
+// Collect action-level errors in one place (avoid undefined variable warnings)
+$__action_errors = [];
+// Ensure core helpers are available (require_once is safe if index.php already included them)
+require_once __DIR__ . '/functions.php';
 
 /** 
  * File: actions.php
@@ -16,39 +22,6 @@ if (!function_exists('bindIntOrNull')) {
         }
     }
 }
-// --- Fallback shim: ensure e() exists even if functions.php wasn't loaded ---
-// --- Fallback shim: ensure flash_* helpers exist even if functions.php isn't loaded ---
-if (!function_exists('flash')) {
-/**
- * flash — function documentation.
- *
- * @param mixed $type
- * @param mixed $message
- * @return mixed
- */
-
-    function flash(string $type, string $message): void {
-        $_SESSION['feedback_type'] = $type;
-        $_SESSION['feedback_message'] = $message;
-    }
-}
-if (!function_exists('flash_success')) { function flash_success(string $m): void { flash('success', $m); } }
-if (!function_exists('flash_error'))   { function flash_error(string $m): void { flash('error',   $m); } }
-if (!function_exists('flash_info'))    { function flash_info(string $m): void { flash('info',    $m); } }
-// --- Fallback shim: ensure e() exists even if functions.php wasn't loaded ---
-if (!function_exists('e')) {
-/**
- * e — function documentation.
- *
- * @param mixed $s
- * @return mixed
- */
-
-    function e(?string $s): string {
-        return htmlspecialchars($s ?? '', ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
-}
-}
-
 
 // --- START: Strain Memory Management ---
 
@@ -182,13 +155,20 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['form-type']) && $_POST
         $_SESSION['searchgenotype'] = isset($_POST['check']['genotype']) ? 1 : 0;
         $_SESSION['searchcomment'] = isset($_POST['check']['comment']) ? 1 : 0;
 
-        // If all keyword AND number AND signature fields are empty, redirect to error
+        // If all keyword AND number AND signature fields are empty, mark empty search
         if( empty($_POST['term1']) && empty($_POST['term2']) && empty($_POST['term3']) && empty($_POST['term4']) &&
             empty($_POST['notterm1']) && empty($_POST['notterm2']) && empty($_POST['notterm3']) && empty($_POST['notterm4']) &&
             empty($_POST['minNum']) && empty($_POST['maxNum']) && empty($_POST['sign1'])
         ) {
-            header("Location: index.php?mode=search&error=error");
-            exit; // Add exit after header redirect
+            // Produce a centralized error flash (will be rendered by index.php in main)
+            $_SESSION['feedback_type'] = 'error';
+            $_SESSION['feedback_message'] = 'Please enter keywords OR a number range/signature.';
+            // Clear any session search keys to ensure a fresh state
+            $_SESSION['term1'] = $_SESSION['term2'] = $_SESSION['term3'] = $_SESSION['term4'] = '';
+            $_SESSION['notterm1'] = $_SESSION['notterm2'] = $_SESSION['notterm3'] = $_SESSION['notterm4'] = '';
+            $_SESSION['minNum'] = $_SESSION['maxNum'] = $_SESSION['sign1'] = '';
+            header("Location: index.php?mode=search&type=word");
+            exit;
         }
     }
 
@@ -481,7 +461,8 @@ $nInserted++;                            // <<< count successful rows
         // No rows reported as inserted
         $_SESSION['feedback_type']    = 'info';
         $_SESSION['feedback_message'] = 'No strains were added.';
-        header("Location: index.php?mode=add&Line=" . ($_SESSION["Line"] ?? 1));
+        $dbg = (isset($_REQUEST['debug']) && $_REQUEST['debug'] === '1') ? '&debug=1' : '';
+        header("Location: index.php?mode=add&Line=" . ($_SESSION["Line"] ?? 1) . $dbg);
         exit;
     }
 
@@ -501,8 +482,13 @@ $nInserted++;                            // <<< count successful rows
         'max'   => $maxId,
     ];
 
-    // Load the results table immediately (no Search tab)
-    header("Location: index.php?mode=add3");
+    // Preserve debug flag (submitted as hidden field) across redirect if present.
+    $dbg = (isset($_REQUEST['debug']) && $_REQUEST['debug'] === '1') ? '&debug=1' : '';
+    // Redirect to add3 and include the numeric range in the query string so the next request
+    // deterministically shows the newly added rows (avoids transient session race).
+    $loc = 'index.php?mode=add3&minNum=' . intval($minId) . '&maxNum=' . intval($maxId) . '&recent=1' . $dbg;
+    session_write_close(); // ensure session is written
+    header('Location: ' . $loc);
     exit;
 
 } else {
@@ -510,12 +496,17 @@ $nInserted++;                            // <<< count successful rows
     $transaction_fail = true;
     $_SESSION['feedback_type']    = 'error';
     $_SESSION['feedback_message'] = 'Insert failed.';
-    header("Location: index.php?mode=add&Line=" . ($_SESSION["Line"] ?? 1));
+    $dbg = (isset($_REQUEST['debug']) && $_REQUEST['debug'] === '1') ? '&debug=1' : '';
+    header("Location: index.php?mode=add&Line=" . ($_SESSION["Line"] ?? 1) . $dbg);
     exit;
 }
 
         } else {
-            header("Location: index.php?mode=add&Line=" . $_SESSION["Line"]);
+            // Set a centralized error flash so the banner appears in the main area.
+            $_SESSION['feedback_type'] = 'error';
+            $_SESSION['feedback_message'] = 'There are fields with errors. Please correct highlighted fields and save again.';
+            $dbg = (isset($_REQUEST['debug']) && $_REQUEST['debug'] === '1') ? '&debug=1' : '';
+            header("Location: index.php?mode=add&Line=" . ($_SESSION["Line"] ?? 1) . $dbg);
             exit;
         }
     }
@@ -698,9 +689,23 @@ if (isset($_POST['form-type']) && in_array($_POST['form-type'], ['edit-user-load
         $resetPw = !empty($_POST['reset_password']);
         if ($uname === '') { $_SESSION['feedback_type']='error'; $_SESSION['feedback_message']='No user selected.'; header('Location: index.php?mode=addUser&umode=edit'); exit; }
 
+        // Determine whether the database has 'users' or 'Users' table name
         $usersTable = 'users';
-        try { $usersTable = (new PDO($dsn,$db_user,$db_pass)); } catch (Throwable $t) {}
-        $usersTable = 'users'; // fallback fixed name; adjust if your DB uses 'Users'
+        try {
+            $hasLower = (bool)$dbh->query("SHOW TABLES LIKE 'users'")->fetchColumn();
+            $hasUpper = (bool)$dbh->query("SHOW TABLES LIKE 'Users'")->fetchColumn();
+            if ($hasLower) {
+                $usersTable = 'users';
+            } elseif ($hasUpper) {
+                $usersTable = 'Users';
+            } else {
+                // default fallback
+                $usersTable = 'users';
+            }
+        } catch (Throwable $t) {
+            // In case the above check fails, fall back safely
+            $usersTable = 'users';
+        }
 
         $stmt = $dbh->prepare("SELECT * FROM `{$usersTable}` WHERE Username = :u LIMIT 1");
         $stmt->bindParam(':u', $uname);

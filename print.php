@@ -113,11 +113,13 @@ if($sql){
 						echo "</td>";
 
 						echo "<td align='right'>";
-							echo ($row['Recipient'] == "0") ? "" : "DA" . $row['Recipient'];
+							$recipientId = (int)($row['Recipient'] ?? 0);
+							echo ($recipientId > 0) ? "DA" . $recipientId : "";
 						echo "</td>";
 
 						echo "<td align='right'>";
-							echo ($row['Donor'] == "0") ? "" : "DA" . $row['Donor'];
+							$donorId = (int)($row['Donor'] ?? 0);
+							echo ($donorId > 0) ? "DA" . $donorId : "";
 						echo "</td>";
 
 						echo "<td>";
@@ -126,6 +128,16 @@ if($sql){
 
 						echo "<td>";
 							echo htmlspecialchars($row['Signature']); // Sanitize signature too
+						echo "</td>";
+						
+						echo "<td>";
+                            $createdRaw = (string)($row['Created'] ?? '');
+                            // treat 0000-00-00 00:00:00 and 1970-01-01 01:00:01 as blank
+                            if (in_array($createdRaw, ['0000-00-00 00:00:00', '1970-01-01 01:00:01'], true)) {
+                                echo '';
+                            } else {
+                                echo htmlspecialchars($createdRaw, ENT_QUOTES, 'UTF-8');
+                            }
 						echo "</td>";
 					echo "</tr>";
 				} // END foreach
