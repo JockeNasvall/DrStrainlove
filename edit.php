@@ -6,8 +6,11 @@
  */
 
 
+require_once __DIR__ . '/permissions.php';
+
+
 // Check user rights
-if($_SESSION['Usertype'] == 'Superuser') {
+if (can('edit_strains')) {
 
 	$sql = null; // Initialize
 	$sql2 = null;
