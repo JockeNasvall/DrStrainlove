@@ -65,7 +65,7 @@ if(isset($_GET['logout']) && $_GET['logout'] == '1') {
 		<script type="text/javascript" src="js/script.js" ></script>
 
 
-		<title>Dr Strainlove</title>
+		<title>Dr Strainlove v2.0</title>
 	<style id="hotfix-js-disabled">
   #js-disabled { display: none !important; }
 </style>
@@ -444,7 +444,7 @@ if (!empty($__DEBUG)) {
 				</div>
 			</div> <div class='noPrint'>
 				<div id="footer">
-					<p>2011-2025 &middot; Joakim Näsvall &middot; This page was last updated 2025-11-11 by Joakim Näsvall and ChatGPT (some added magic, major code cleanup, migration to php 8 and finally runs as a real LAMP server!).</p>
+					<p>2011-2025 &middot; Joakim Näsvall &middot; This page was last updated 2025-12-02 by Joakim Näsvall and ChatGPT (some added magic, major code cleanup, migration to php 8 and finally runs as a real LAMP server!).</p>
 				</div>
 			</div>
 		</div> </body>
