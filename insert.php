@@ -11,7 +11,10 @@ if($_SESSION['Usertype'] == 'Superuser') {
 
 	$helpmessage = "Genotype field can not be empty.";
 
+	// Preserve debug flag (if present in URL) so subsequent POST+redirects can retain debug mode.
+	$__debug_val = htmlspecialchars($_REQUEST['debug'] ?? '', ENT_QUOTES, 'UTF-8');
 	echo '<form action="index.php?mode=add3" name="frmAdd" method="post">';
+	echo '<input type="hidden" name="debug" value="' . $__debug_val . '">';
 		echo "<p>";
 			echo "Number of strains to add: ";
 			echo '<select class="droplist" name="menu1">';
@@ -40,13 +43,10 @@ if($_SESSION['Usertype'] == 'Superuser') {
 ?>
 <p Title='Move the mouse pointer over the field you need help with.'>For help, please see the mouseover tooltips and read the <a href="index.php?mode=guidelines" target="_blank">Guidelines</a>.</br></br>
 	<?php
-		// Did we fail validation
-		if(isset($_SESSION['saveFail'])) {
-			echo '<p class="validation-fail">There are fields with errors.</p>';
-			$failedRows = $_SESSION['saveFail'];
-		} else {
-			$failedRows = array(); // Initialize if not set
-		}
+		// Per-field failure details are kept in $_SESSION['saveFail'].
+		// The page-wide banner is rendered centrally by index.php from
+		// $_SESSION['feedback_message'] / feedback_type so we don't echo it here.
+		$failedRows = !empty($_SESSION['saveFail']) && is_array($_SESSION['saveFail']) ? $_SESSION['saveFail'] : [];
 
 		// Print table header
 		echo "<table class='insert'>";

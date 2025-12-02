@@ -1,18 +1,47 @@
 <?php declare(strict_types=1);
-
-/**
- * tools_db_post_import_audit_plus.php — Guest checks + Dry-run/Apply + smart summary
- * - declare(strict_types=1) first
- * - Dry-run (default) / Apply via POST apply=1 or ?apply=1
- * - Summary table (uses audit_log), with fallback that parses detailed <li> lines
- */
-
 @session_start();
-@include_once __DIR__ . '/db.php'; // expects $dbh (PDO)
-if (!isset($dbh) || !($dbh instanceof PDO)) {
-    echo "<h1>DB Post-Import Audit</h1>";
-    echo "<div style='color:#c00'>ERROR: No PDO \$dbh available. Ensure db.php initializes \$dbh.</div>";
-    exit;
+
+// --- Access gate: deny remote HTTP access unless from localhost OR valid token provided ---
+$remoteAddr = $_SERVER['REMOTE_ADDR'] ?? '';
+$allowedLocal = ['127.0.0.1', '::1'];
+
+// Allow CLI and localhost immediately
+if (php_sapi_name() !== 'cli' && !in_array($remoteAddr, $allowedLocal, true)) {
+    // Try to locate token file in same dir as tool
+    $tokenFile = __DIR__ . '/.access_token';
+    $provided = null;
+
+    // Check Authorization Bearer header
+    $authHeader = $_SERVER['HTTP_AUTHORIZATION'] ?? ($_SERVER['REDIRECT_HTTP_AUTHORIZATION'] ?? null);
+    if (is_string($authHeader) && stripos($authHeader, 'Bearer ') === 0) {
+        $provided = substr($authHeader, 7);
+    }
+
+    // Fallback: token via GET/POST 'token'
+    if ($provided === null && isset($_REQUEST['token'])) {
+        $provided = (string)$_REQUEST['token'];
+    }
+
+    $expected = '';
+    if (is_file($tokenFile)) {
+        $expected = trim(@file_get_contents($tokenFile));
+    }
+
+    // Validate token if present; if no token file exists, prefer deny and show instruction
+    $ok = ($expected !== '' && $provided !== null && hash_equals($expected, (string)$provided));
+
+    if (!$ok) {
+        header('HTTP/1.1 403 Forbidden');
+        echo "<h1>403 Forbidden</h1>";
+        echo "<p>Access to this tool is restricted. Allow only from localhost or provide a valid token.</p>";
+        if (!is_file($tokenFile)) {
+            echo "<p>To enable remote authenticated access, create a file named <code>" . htmlspecialchars(basename($tokenFile)) . "</code> in the tools directory containing a secret token (one line). Then supply that token either as <code>?token=YOURTOKEN</code> or as an <code>Authorization: Bearer YOURTOKEN</code> header.</p>";
+            echo "<p>Alternatively, run this script locally on the server or move the tool outside the web root and run it from the CLI.</p>";
+        } else {
+            echo "<p>Provide the token via <code>?token=...</code> or <code>Authorization: Bearer ...</code>.</p>";
+        }
+        exit;
+    }
 }
 
 /* ---------- Mode & state ---------- */
@@ -35,6 +64,19 @@ function audit_log(string $category, string $check, string $status, string $deta
     ];
 }
 function add_detail(string $liHtml): void { $GLOBALS['AUDIT_DETAILS'][] = $liHtml; }
+
+/* ---- new helper: resolve users table name ---- */
+function users_table(PDO $dbh): ?string {
+    try {
+        $db = (string)$dbh->query('SELECT DATABASE()')->fetchColumn();
+        $stmt = $dbh->prepare("SELECT TABLE_NAME FROM information_schema.tables WHERE table_schema = ? AND table_name IN ('users','Users') LIMIT 1");
+        $stmt->execute([$db]);
+        $tbl = $stmt->fetchColumn();
+        return $tbl ?: null;
+    } catch (Throwable $t) {
+        return null;
+    }
+}
 
 /** Execute or dry-run a SQL statement; returns affected rows (or 0 in dry-run) */
 function run_sql(PDO $dbh, string $sql, string $desc, string $cat='sql'): int {
@@ -200,35 +242,62 @@ function ensure_guest_account_usertype(PDO $dbh): void {
     }
 }
 
-/** Enforce blank-password policy: NULL -> '' and NOT NULL DEFAULT '' */
+/** Enforce blank-password policy: NULL -> '' and NOT NULL DEFAULT '' and ensure length >= 255 */
 function enforce_password_blank_policy(PDO $dbh): void {
     try {
-        $n = run_sql($dbh, "UPDATE `users` SET `Password`='' WHERE `Password` IS NULL", "Normalize NULL passwords to ''", 'users');
+        $usersTable = users_table($dbh) ?? 'users';
+
+        // Normalize NULL values first (dry-run/apply aware)
+        $n = run_sql($dbh, "UPDATE `{$usersTable}` SET `Password`='' WHERE `Password` IS NULL", "Normalize NULL passwords to '' in {$usersTable}", 'users');
         if (!empty($GLOBALS['APPLY_FIXES']) && $n > 0) {
-            add_detail("<li>Fixed: converted {$n} NULL password(s) to empty string ''.</li>");
-            audit_log('users','Password blanks','FIXED',"Converted {$n} to ''");
+            add_detail("<li>Fixed: converted {$n} NULL password(s) to empty string '' in {$usersTable}.</li>");
+            audit_log('users','Password blanks','FIXED',"Converted {$n} to '' in {$usersTable}");
         }
-        $meta = $dbh->query(
-            "SELECT IS_NULLABLE, COLUMN_DEFAULT
+
+        // Inspect column metadata
+        $metaStmt = $dbh->prepare(
+            "SELECT IS_NULLABLE, COLUMN_DEFAULT, CHARACTER_MAXIMUM_LENGTH, COLUMN_TYPE
              FROM INFORMATION_SCHEMA.COLUMNS
              WHERE TABLE_SCHEMA = DATABASE()
-               AND TABLE_NAME='users' AND COLUMN_NAME='Password'"
-        )->fetch(PDO::FETCH_ASSOC);
-        $needsAlter = !$meta || $meta['IS_NULLABLE'] !== 'NO' || $meta['COLUMN_DEFAULT'] != '';
-        if ($needsAlter) {
-            run_sql(
-                $dbh,
-                "ALTER TABLE `users` MODIFY `Password` varchar(255) NOT NULL DEFAULT ''",
-                "Ensure users.Password NOT NULL DEFAULT ''",
-                'users'
-            );
+               AND TABLE_NAME = :tbl AND COLUMN_NAME = 'Password'"
+        );
+        $metaStmt->execute([':tbl' => $usersTable]);
+        $meta = $metaStmt->fetch(PDO::FETCH_ASSOC);
+
+        $needsAlter = false;
+        $currentDesc = [];
+        if (!$meta) {
+            // Column missing or could not be read
+            add_detail("<li>WARN: Could not inspect {$usersTable}.Password column metadata.</li>");
+            audit_log('users','Password column','WARN',"Could not read metadata for {$usersTable}.Password");
+            // Suggest ALTER to create/ensure column shape in dry-run (be conservative)
+            $needsAlter = true;
         } else {
-            add_detail("<li>OK: users.Password is NOT NULL DEFAULT ''.</li>");
-            audit_log('users','Password column','OK',"Already NOT NULL DEFAULT ''");
+            $isNullable = ($meta['IS_NULLABLE'] ?? '') !== 'NO';
+            $default    = $meta['COLUMN_DEFAULT'] ?? null;
+            $maxlen     = isset($meta['CHARACTER_MAXIMUM_LENGTH']) ? (int)$meta['CHARACTER_MAXIMUM_LENGTH'] : 0;
+
+            $currentDesc[] = 'nullable=' . ($isNullable ? 'YES' : 'NO');
+            $currentDesc[] = 'default=' . ($default === null ? 'NULL' : (string)$default);
+            $currentDesc[] = 'len=' . $maxlen;
+
+            // Require NOT NULL, default '' and length >= 255
+            if ($isNullable || ($default !== '' && $default !== null) || $maxlen < 255) {
+                $needsAlter = true;
+            }
         }
+
+        if ($needsAlter) {
+            $alterSql = "ALTER TABLE `{$usersTable}` MODIFY `Password` varchar(255) NOT NULL DEFAULT ''";
+            run_sql($dbh, $alterSql, "Ensure {$usersTable}.Password VARCHAR(255) NOT NULL DEFAULT ''", 'users');
+        } else {
+            add_detail("<li>OK: {$usersTable}.Password is NOT NULL DEFAULT '' and length >= 255. (" . htmlspecialchars(implode(', ', $currentDesc)) . ")</li>");
+            audit_log('users','Password column','OK',"{$usersTable}.Password OK; " . implode(', ', $currentDesc));
+        }
+
     } catch (Throwable $t) {
-        add_detail("<li>ERROR: enforcing password blank policy: ".htmlspecialchars($t->getMessage())."</li>");
-        audit_log('users','Password policy','ERROR','Exception during enforcement');
+        add_detail("<li>ERROR: enforcing password blank/length policy: ".htmlspecialchars($t->getMessage())."</li>");
+        audit_log('users','Password policy','ERROR','Exception during enforcement: '.$t->getMessage());
     }
 }
 

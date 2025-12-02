@@ -22,52 +22,21 @@ if (isset($_GET['page'])) {
 // Calculate startval based on page and limit, even if page comes from GET
 $startval = ($page - 1) * $limit;
 
-// Set variables for min and max number as well as signature, in order Get, Post, Session.
-// Use POST first if available (new search), otherwise fallback to session (pagination/reload)
-if (isset($_POST['isPosted']) && $_POST['isPosted'] == 'TRUE') {
-    $minNum = $_POST['minNum'] ?? '';
-    $maxNum = $_POST['maxNum'] ?? '';
-    $sign1 = $_POST['sign1'] ?? '';
-    $term1 = $_POST['term1'] ?? '';
-    $term2 = $_POST['term2'] ?? '';
-    $term3 = $_POST['term3'] ?? '';
-    $term4 = $_POST['term4'] ?? '';
-    $notterm1 = $_POST['notterm1'] ?? '';
-    $notterm2 = $_POST['notterm2'] ?? '';
-    $notterm3 = $_POST['notterm3'] ?? '';
-    $notterm4 = $_POST['notterm4'] ?? '';
-    $searchgenotype = isset($_POST['check']['genotype']) ? 1 : 0;
-    $searchcomment = isset($_POST['check']['comment']) ? 1 : 0;
-} elseif (isset($_GET['page']) || isset($_GET['search'])) { // If navigating pages or reloading via GET link
-    // Load from session
-    $minNum = isset($_SESSION['minNum']) ? $_SESSION['minNum'] : '';
-    $maxNum = isset($_SESSION['maxNum']) ? $_SESSION['maxNum'] : '';
-    $sign1 = isset($_SESSION['sign1']) ? $_SESSION['sign1'] : '';
-    $term1 = isset($_SESSION['term1']) ? $_SESSION['term1'] : '';
-    $term2 = isset($_SESSION['term2']) ? $_SESSION['term2'] : '';
-    $term3 = isset($_SESSION['term3']) ? $_SESSION['term3'] : '';
-    $term4 = isset($_SESSION['term4']) ? $_SESSION['term4'] : '';
-    $notterm1 = isset($_SESSION['notterm1']) ? $_SESSION['notterm1'] : '';
-    $notterm2 = isset($_SESSION['notterm2']) ? $_SESSION['notterm2'] : '';
-    $notterm3 = isset($_SESSION['notterm3']) ? $_SESSION['notterm3'] : '';
-    $notterm4 = isset($_SESSION['notterm4']) ? $_SESSION['notterm4'] : '';
-    $searchgenotype = isset($_SESSION['searchgenotype']) ? $_SESSION['searchgenotype'] : 0;
-    $searchcomment = isset($_SESSION['searchcomment']) ? $_SESSION['searchcomment'] : 0;
-} else { // First load or reset
-    $minNum = '';
-    $maxNum = '';
-    $sign1 = '';
-    $term1 = '';
-    $term2 = '';
-    $term3 = '';
-    $term4 = '';
-    $notterm1 = '';
-    $notterm2 = '';
-    $notterm3 = '';
-    $notterm4 = '';
-    $searchgenotype = 1; // Default to searching genotype
-    $searchcomment = 0;
-}
+// Use session values as defaults. index.php now manages REQUEST → SESSION bridging,
+// so this file simply reads the session for pre-filled form values.
+$minNum = $_SESSION['minNum'] ?? '';
+$maxNum = $_SESSION['maxNum'] ?? '';
+$sign1  = $_SESSION['sign1']  ?? '';
+$term1  = $_SESSION['term1']  ?? '';
+$term2  = $_SESSION['term2']  ?? '';
+$term3  = $_SESSION['term3']  ?? '';
+$term4  = $_SESSION['term4']  ?? '';
+$notterm1 = $_SESSION['notterm1'] ?? '';
+$notterm2 = $_SESSION['notterm2'] ?? '';
+$notterm3 = $_SESSION['notterm3'] ?? '';
+$notterm4 = $_SESSION['notterm4'] ?? '';
+$searchgenotype = $_SESSION['searchgenotype'] ?? 1;
+$searchcomment  = $_SESSION['searchcomment'] ?? 0;
 
 
 // Determine checkbox states based on variables

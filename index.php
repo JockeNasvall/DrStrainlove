@@ -11,9 +11,31 @@ date_default_timezone_set('Europe/Berlin');
 
 
 if (session_status() !== PHP_SESSION_ACTIVE) { session_start(); }
-@require_once __DIR__ . '/db.php';
-// ===== DEBUG: request probe (add &debug=1 to the URL) =====
+// Lightweight debug toggle: add &debug=1 to the URL to show PHP errors
 $__DEBUG = isset($_REQUEST['debug']) && $_REQUEST['debug'] === '1';
+if ($__DEBUG) {
+    @ini_set('display_errors', '1');
+    @ini_set('display_startup_errors', '1');
+    error_reporting(E_ALL);
+}
+// Require db.php if present, otherwise surface a clear 500 message (avoids silent fatal)
+if (file_exists(__DIR__ . '/db.php')) {
+    require_once __DIR__ . '/db.php';
+} else {
+    http_response_code(500);
+    error_log('[BOOT] Missing db.php at ' . __DIR__ . '/db.php');
+    if (!empty($__DEBUG)) {
+        echo '<h2 style="color:red">Server misconfiguration: missing db.php</h2>';
+    }
+    exit('Server misconfiguration');
+}
+
+// Ensure application logic is loaded so POST actions (search/reset/store/etc.) are processed.
+require_once __DIR__ . '/functions.php';
+require_once __DIR__ . '/actions.php';
+// Load search helper moved to lib/ (if present)
+@require_once __DIR__ . '/lib/search_filters.php';
+// ===== DEBUG: request probe (add &debug=1 to the URL) =====
 if ($__DEBUG) {
     echo '<div style="margin:12px 0;padding:10px;border:1px dashed #999;border-radius:8px;background:#f9f9f9">';
     echo '<strong>DEBUG — request</strong><pre style="white-space:pre-wrap">';
@@ -22,82 +44,6 @@ if ($__DEBUG) {
     echo "\n\$_POST:\n", htmlspecialchars(print_r($_POST, true));
     echo "</pre></div>";
 }
-
-// ===== DEBUG: request probe (add &debug=1 to the URL) =====
-$__DEBUG = isset($_REQUEST['debug']) && $_REQUEST['debug'] === '1';
-if ($__DEBUG) {
-    echo '<div style="margin:12px 0;padding:10px;border:1px dashed #999;border-radius:8px;background:#f9f9f9">';
-    echo '<strong>DEBUG — request</strong><pre style="white-space:pre-wrap">';
-    echo "URI: ", htmlspecialchars($_SERVER['REQUEST_URI'] ?? ''), "\n\n";
-    echo "\$_GET:\n", htmlspecialchars(print_r($_GET, true));
-    echo "\n\$_POST:\n", htmlspecialchars(print_r($_POST, true));
-    echo "</pre></div>";
-}
-
-// === EARLY LOGIN HANDLER (no layout changes) ===
-if ($_SERVER['REQUEST_METHOD'] === 'POST' && (isset($_POST['Username']) || isset($_POST['username']))) {
-    $username = trim($_POST['Username'] ?? $_POST['username']);
-    $password = (string)($_POST['Password'] ?? ($_POST['password'] ?? ''));
-
-    try {
-        $stmt = $dbh->prepare("SELECT * FROM `users` WHERE `Username` = :u LIMIT 1");
-        $stmt->bindParam(':u', $username);
-        $stmt->execute();
-        $user = $stmt->fetch(PDO::FETCH_ASSOC);
-    } catch (Throwable $t) {
-        error_log("[LOGIN] DB error: ".$t->getMessage());
-        $user = false;
-    }
-
-    if (!$user) {
-        $_SESSION['feedback_type'] = 'error';
-        $_SESSION['feedback_message'] = 'Login failed.';
-        header('Location: index.php?mode=login');
-        exit;
-    }
-
-    $storedRaw  = array_key_exists('Password', $user) ? $user['Password'] : null; // see NULL too
-    $stored     = (string)($storedRaw ?? '');
-    $storedTrim = trim($stored);
-
-    // Blank stored password: auto-login + force upgrade (only changePassword allowed)
-    if ($storedRaw === null || $storedTrim === '') {
-        $_SESSION['login']     = '1';
-        $_SESSION['Username']  = $user['Username'] ?? '';
-        $_SESSION['user']      = $user['Username'] ?? '';
-        $_SESSION['Usertype']  = $user['Usertype'] ?? '';
-        if (isset($user['Signature'])) { $_SESSION['Signature'] = $user['Signature']; }
-        $_SESSION['needs_pw_upgrade'] = 1;
-        session_regenerate_id(true);
-        header('Location: index.php?mode=changePassword');
-        exit;
-    }
-
-    // Verify MD5 or password_hash
-    $ok = false;
-    if (preg_match('/^[a-f0-9]{32}$/i', $storedTrim)) {
-        $ok = hash_equals(strtolower($storedTrim), md5($password));
-    } else {
-        $ok = password_verify($password, $storedTrim);
-    }
-
-    if ($ok) {
-        $_SESSION['login']     = '1';
-        $_SESSION['Username']  = $user['Username'] ?? '';
-        $_SESSION['user']      = $user['Username'] ?? '';
-        $_SESSION['Usertype']  = $user['Usertype'] ?? '';
-        if (isset($user['Signature'])) { $_SESSION['Signature'] = $user['Signature']; }
-        session_regenerate_id(true);
-        header('Location: index.php');
-        exit;
-    }
-
-    $_SESSION['feedback_type'] = 'error';
-    $_SESSION['feedback_message'] = 'Login failed.';
-    header('Location: index.php?mode=login');
-    exit;
-}
-// === /EARLY LOGIN HANDLER ===
 
 // Logout
 if(isset($_GET['logout']) && $_GET['logout'] == '1') {
@@ -108,13 +54,13 @@ if(isset($_GET['logout']) && $_GET['logout'] == '1') {
 }
 
 // Connect to the database or die
-include("db.php");
+//include("db.php");
 
 // Include all functions
-include("functions.php");
+//include("functions.php");
 
 // Include all actions for forms
-include("actions.php");
+//include("actions.php");
 
 // Troubleshooting
 
@@ -172,14 +118,9 @@ include("actions.php");
 
 	<body>
 <?php
-// Standard flash renderer
-if (!empty($_SESSION['feedback_message'])) {
-    $flash_type = $_SESSION['feedback_type'] ?? 'info';
-    $msg = $_SESSION['feedback_message'];
-    echo '<div class="flash flash-' . htmlspecialchars($flash_type, ENT_QUOTES, 'UTF-8') . '">'
-         . htmlspecialchars($msg, ENT_QUOTES, 'UTF-8') . '</div>';
-    unset($_SESSION['feedback_message'], $_SESSION['feedback_type']);
-}
+// NOTE: Do not render flashes here. The centralized flash is rendered inside #main
+// after the included page content so any included file (search1, insert, etc.)
+// can set $_SESSION['feedback_message'] and it will appear consistently in one place.
 ?>
 
 		<div id="container" >
@@ -218,7 +159,12 @@ if (!empty($_SESSION['feedback_message'])) {
 									<li><a class="<?php echo (isset($_GET['mode']) && $_GET['mode'] == 'search' ? 'current' : NULL); // Simplified: Search tab is active if mode is 'search' ?>" href="index.php?mode=search&amp;type=word">Search strains</a></li>	
 
 					<?php if(isset($_SESSION['Usertype']) && $_SESSION['Usertype'] == 'Superuser'){ ?>
-						<li><a class="<?php echo (isset($_GET['mode']) && $_GET['mode'] == 'add' ? 'current' : NULL); ?>" href="index.php?mode=add&amp;Line=<?php echo isset($_SESSION['Line']) ? $_SESSION['Line'] : 1;?>">Add strain(s)</a></li>
+						<?php
+							// Mark Add tab active for both the add form and the "add results" view (mode=add3)
+							$add_modes = ['add','add3'];
+							$add_active = (isset($_GET['mode']) && in_array($_GET['mode'], $add_modes, true)) ? 'current' : NULL;
+						?>
+						<li><a class="<?php echo $add_active; ?>" href="index.php?mode=add&amp;Line=<?php echo isset($_SESSION['Line']) ? $_SESSION['Line'] : 1;?>">Add strain(s)</a></li>
 						<li><a class="<?php echo (isset($_GET['mode']) && $_GET['mode'] == 'addUser' ? 'current' : NULL); ?>" href="index.php?mode=addUser">User management</a></li>
 					<?php } ?>
 					<li><a class="<?php echo (isset($_GET['mode']) && $_GET['mode'] == 'guidelines' ? 'current' : NULL); ?>" href="index.php?mode=guidelines">Guidelines</a></li>
@@ -240,14 +186,54 @@ if (!empty($_SESSION['feedback_message'])) {
 <?php $helpmessage = ""; ?>
 <?php $helpmessage2 = ""; ?>
             <?php
-                // Display and clear feedback messages
-                if (isset($_SESSION['feedback_message'])) {
-                    echo "<p style='color: green; font-weight: bold; border: 1px solid green; padding: 5px; margin-bottom: 10px;'>" . htmlspecialchars($_SESSION['feedback_message']) . "</p>";
-                    unset($_SESSION['feedback_message']); // Clear message after displaying
+                // CENTRALIZED FLASH RENDERER (placed here so included files can set $_SESSION feedback)
+                if (!empty($_SESSION['feedback_message'])) {
+                    $flash_type = $_SESSION['feedback_type'] ?? 'info';
+                    $msg = $_SESSION['feedback_message'];
+                    if ($flash_type === 'success') {
+                        $style = 'color:#075; background:#eefaf0; border:1px solid #9ad18b;';
+                    } elseif ($flash_type === 'error') {
+                        $style = 'color:#900; background:#ffecec; border:1px solid #f5c2c2;';
+                    } else {
+                        $style = 'color:#064; background:#ebf8ff; border:1px solid #bee3f8;';
+                    }
+                    echo '<div style="margin:12px 0;padding:10px 14px;border-radius:8px;font-weight:700;' . $style . '">';
+                    echo htmlspecialchars($msg, ENT_QUOTES, 'UTF-8');
+                    echo '</div>';
+                    unset($_SESSION['feedback_message'], $_SESSION['feedback_type']);
                 }
             ?>
 				<?php
 				$value = isset($_GET['mode']) ? $_GET['mode'] : '';
+
+                // If add-results were requested with explicit min/max in the URL, ensure session contains the range.
+                // actions.php now redirects to ?mode=add3&minNum=...&maxNum=...
+                if ($value === 'add3' && (isset($_GET['minNum']) || isset($_GET['maxNum']))) {
+                    $gmin = isset($_GET['minNum']) ? (int)$_GET['minNum'] : 0;
+                    $gmax = isset($_GET['maxNum']) ? (int)$_GET['maxNum'] : 0;
+                    if ($gmin > 0 && $gmax > 0) {
+                        if ($gmin > $gmax) { [$gmin, $gmax] = [$gmax, $gmin]; }
+                        $_SESSION['minNum'] = $gmin;
+                        $_SESSION['maxNum'] = $gmax;
+                        $_SESSION['last_search_page'] = 1;
+                    }
+                }
+
+                 // If we just returned from a successful add (either mode=add3 or mode=add&show=add3),
+                 // ensure search1.php can see the numeric range by copying recent_add -> minNum/maxNum.
+                 // Actions.php sets $_SESSION['recent_add'] and redirects to ?mode=add&show=add3.
+                 if (!empty($_SESSION['recent_add']) && is_array($_SESSION['recent_add'])
+                     && ($value === 'add3' || ($value === 'add' && (isset($_GET['show']) && $_GET['show'] === 'add3')))
+                 ) {
+                     $rmin = (int)($_SESSION['recent_add']['min'] ?? 0);
+                     $rmax = (int)($_SESSION['recent_add']['max'] ?? 0);
+                     if ($rmin > 0 && $rmax > 0) {
+                         if ($rmin > $rmax) { [$rmin, $rmax] = [$rmax, $rmin]; }
+                         $_SESSION['minNum'] = $rmin;
+                         $_SESSION['maxNum'] = $rmax;
+                         $_SESSION['last_search_page'] = 1;
+                     }
+                 }
 				if (!empty($_SESSION['needs_pw_upgrade']) && (isset($mode) ? $mode !== 'changePassword' : $value !== 'changePassword')) {
     if (isset($mode)) { $mode = 'changePassword'; } else { $value = 'changePassword'; }
 }
@@ -262,10 +248,10 @@ if (!empty($_SESSION['feedback_message'])) {
                         // Always include the search form when mode is 'search'
                         include("search.php");
 // ===== BRIDGE: REQUEST (GET/POST) -> SESSION for search filters =====
-// Helper: first non-empty from REQUEST by list of keys
+// Helper: first present (not only non-empty) value from REQUEST by list of keys
 $reqVal = static function(array $names) {
     foreach ($names as $n) {
-        if (isset($_REQUEST[$n]) && $_REQUEST[$n] !== '') return $_REQUEST[$n];
+        if (array_key_exists($n, $_REQUEST)) return $_REQUEST[$n]; // PRESENCE matters ('' will be returned)
     }
     return null;
 };
@@ -275,6 +261,8 @@ $raw_min = $reqVal(['minNumber','minNum','min']);    // form may use minNum in o
 $raw_max = $reqVal(['maxNumber','maxNum','max']);
 $raw_lim = $reqVal(['limit']);
 $raw_gen = $reqVal(['genotype','term1']);            // term1 is the legacy “contains” input
+// signature filter
+$raw_sign = $reqVal(['sign1']);
 
 // Normalizer: digits only → int 0..999999, null if empty
 $norm = static function($v) {
@@ -296,22 +284,23 @@ if ($max !== null && $min === null) $min = $max;
 if ($min !== null && $max !== null && $min > $max) { $t=$min; $min=$max; $max=$t; }
 
 // Push into the session keys that search1.php reads
-if ($min !== null) $_SESSION['minNum'] = $min;       // used by search1.php
-if ($max !== null) $_SESSION['maxNum'] = $max;       // used by search1.php
-
-// Limit (default 1000, clamp 1..1_000_000) — only if provided
-if ($raw_lim !== null) {
-    $lim = $norm($raw_lim);
-    if ($lim === null) $lim = 1000;
-    if ($lim < 1) $lim = 1;
-    if ($lim > 1000000) $lim = 1000000;
-    $_SESSION['limit'] = $lim;
+// IMPORTANT: use presence checks so an explicit empty field clears the session key
+if (array_key_exists('minNumber', $_REQUEST) || array_key_exists('minNum', $_REQUEST) || array_key_exists('min', $_REQUEST)) {
+    $_SESSION['minNum'] = ($min !== null) ? $min : '';
 }
-
+if (array_key_exists('maxNumber', $_REQUEST) || array_key_exists('maxNum', $_REQUEST) || array_key_exists('max', $_REQUEST)) {
+    $_SESSION['maxNum'] = ($max !== null) ? $max : '';
+}
 // Genotype → legacy term1 (keeps your existing type=word logic intact)
-if ($raw_gen !== null) {
-    $_SESSION['term1'] = (string)$raw_gen;
+// presence (even empty string) should overwrite session
+if (array_key_exists('genotype', $_REQUEST) || array_key_exists('term1', $_REQUEST)) {
+    $_SESSION['term1'] = (string)($raw_gen ?? '');
 }
+// Signature presence handling (explicit empty should clear session)
+if (array_key_exists('sign1', $_REQUEST)) {
+    $_SESSION['sign1'] = (string)($raw_sign ?? '');
+}
+
 
 // ===== DEBUG PANEL (add &debug=1 to URL) =====
 if (!empty($__DEBUG)) {
@@ -320,11 +309,13 @@ if (!empty($__DEBUG)) {
     echo "REQUEST min: ", htmlspecialchars(var_export($raw_min,true)), "\n";
     echo "REQUEST max: ", htmlspecialchars(var_export($raw_max,true)), "\n";
     echo "REQUEST lim: ", htmlspecialchars(var_export($raw_lim,true)), "\n";
-    echo "REQUEST genotype: ", htmlspecialchars(var_export($raw_gen,true)), "\n\n";
+    echo "REQUEST genotype: ", htmlspecialchars(var_export($raw_gen,true)), "\n";
+    echo "REQUEST sign1: ", htmlspecialchars(var_export($raw_sign,true)), "\n\n";
     echo "SESSION minNum: ", htmlspecialchars(var_export($_SESSION['minNum'] ?? null,true)), "\n";
     echo "SESSION maxNum: ", htmlspecialchars(var_export($_SESSION['maxNum'] ?? null,true)), "\n";
     echo "SESSION limit:  ", htmlspecialchars(var_export($_SESSION['limit'] ?? null,true)), "\n";
     echo "SESSION term1:  ", htmlspecialchars(var_export($_SESSION['term1'] ?? null,true)), "\n";
+    echo "SESSION sign1:  ", htmlspecialchars(var_export($_SESSION['sign1'] ?? null,true)), "\n";
     echo "</pre></div>";
 }
 
@@ -355,6 +346,10 @@ if (!empty($__DEBUG)) {
                         // Include the results table if criteria exist or it's a new search/page navigation
                         if ($should_show_results) {
                             include("search1.php");
+                        } elseif (!empty($_SESSION['search_empty'])) {
+                            // One-time message for completely empty search submissions
+                            echo "<span style='color: red'>Please enter keywords OR a number range/signature.</span><br>";
+                            unset($_SESSION['search_empty']);
                         }
                         // If none of the above, only the search form (already included) is shown.
                     }
@@ -372,11 +367,24 @@ if (!empty($__DEBUG)) {
 						include("print.php"); // actions.php prepares list, print.php uses it
 					}
 					elseif ($value == 'add') {
-						include("insert.php");
+						// If this request was triggered by a just-completed add (show=add3 or recent_add present),
+						// show the add-results view instead of the form.
+						// Synthesize mode=add3 in the request so search1.php takes the add3 branch.
+						if ((isset($_GET['show']) && $_GET['show'] === 'add3') || (!empty($_SESSION['recent_add']) && is_array($_SESSION['recent_add']))) {
+						    // Ensure search1.php sees mode=add3 (it checks $_GET['mode'] / $_REQUEST['mode'])
+						    $_GET['mode'] = 'add3';
+						    $_REQUEST['mode'] = 'add3';
+						    include("search1.php"); // Show newly added rows in the Add tab (form removed)
+						} else {
+						    include("insert.php");  // Normal add form
+						}
 					}
 					elseif ($value == 'add3') {
-						include("search1.php"); // Shows newly added strains
-					}
+                        // Always show the add-results view for mode=add3.
+                        // index.php already copies any minNum/maxNum from GET into the session earlier,
+                        // so search1.php will have the numeric range it needs to render the table.
+                        include("search1.php");
+                    }
 					elseif ($value == 'edit2') {
 						include("search1.php"); // Shows edited strains for confirmation
 					}

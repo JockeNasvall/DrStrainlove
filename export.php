@@ -35,6 +35,10 @@ header("Content-disposition: csv" . date("Y-m-d") . ".csv");
 header("Content-disposition: filename=".$filename.".csv");
 
 //Print the contents of out to the generated file.
+
+// Sanitize known sentinel timestamps that should be shown as blank in results/export
+$out = str_replace(["0000-00-00 00:00:00", "1970-01-01 01:00:01"], "", $out);
+
 print $out;
 
 //Exit the script

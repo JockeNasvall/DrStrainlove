@@ -26,6 +26,9 @@ $term3 = $_SESSION['term3'] ?? '';
 $term4 = $_SESSION['term4'] ?? '';
 $sign1 = $_SESSION['sign1'] ?? ''; // Also get sign1 for binding
 
+// Treat these values as "blank" in results
+$BLANK_CREATED = ['0000-00-00 00:00:00', '1970-01-01 01:00:01'];
+
 
 //Begin Search for keywords (Now handles combined search)//
 if(isset($_GET['type']) && $_GET['type'] == 'word') {
@@ -109,10 +112,10 @@ if(isset($_GET['type']) && $_GET['type'] == 'word') {
 	        // REMOVED conditional message setting block
 
 	    } else {
-	        // No criteria entered at all
-	        echo "<span style='color: red'>Please enter keywords OR a number range/signature.</span><br>";
-	        $sql = null;
-	        $sql2 = null;
+	        // No criteria entered at all — set centralized flash and stop rendering this include.
+	        $_SESSION['feedback_type'] = 'error';
+	        $_SESSION['feedback_message'] = 'Please enter keywords OR a number range/signature.';
+	        return; // stop further rendering of search1.php so index.php will render the flash
 	    } // End check if criteria were found
 
 	} // End else for combined logic
@@ -139,9 +142,10 @@ if ($_GET['mode'] == 'myList') {
 	$list = $_SESSION['action_strain_list'] ?? array(); // Use list prepared by actions.php
 
 	if(count($list) == 0) {
-		echo "No strains currently stored in memory.<br>"; // Updated message
-		$sql = null; // Prevent SQL execution if list is empty
-		$sql2 = null; // Also prevent the count query
+		// Centralized feedback for empty memory
+		$_SESSION['feedback_type'] = 'error';
+		$_SESSION['feedback_message'] = 'No strains currently stored in memory.';
+		return;
 	} else {
 		// Prepare parameters for strains in list
 		$listInQuery = array();
@@ -161,31 +165,45 @@ if ($_GET['mode'] == 'myList') {
 
 //Begin List inserted strains
 if ($_GET['mode'] == 'add3') {
-	$page = 1;
-	$limit = 100;
-	$list = $inserted;
-	if (!is_array($list)) {
-	    $list = array();
-	}
+    // Show newly added strains. Prefer the one-time recent_add range set by actions.php.
+    $page = 1;
+    $limit = 100;
 
-	$numberOfListParameters = count($list);
+    $add_minId = null;
+    $add_maxId = null;
 
-	if ($numberOfListParameters > 0) {
-	    // Prepare parameters for strains in list
-	    $listInQuery = array();
-	    for($i = 1; $i <= $numberOfListParameters; $i++){
-	        $listInQuery[$i] = ":list_" . $i;
-	    }
-	    $listInQuery = implode(", ", $listInQuery);
+    // Recent add (set by actions.php on successful insert)
+    if (!empty($_SESSION['recent_add']) && is_array($_SESSION['recent_add'])) {
+        $add_minId = (int)($_SESSION['recent_add']['min'] ?? 0);
+        $add_maxId = (int)($_SESSION['recent_add']['max'] ?? 0);
+    }
 
-	    // $message removed
-	    $sql  = "SELECT * FROM strains WHERE Strain IN (" . $listInQuery . ") ORDER BY Strain ASC"; // Added ORDER BY
-	    $sql2 = "SELECT COUNT(Strain) FROM strains WHERE Strain IN (" . $listInQuery . ")";
-	} else {
-	    echo "No strains were added.<br>";
-	    $sql = null; // This is crucial. It stops the script from running an empty query.
-	    $sql2 = null; // Also stop the count query
-	}
+    // Fallback: if no recent_add, but session min/max exist use them
+    if (($add_minId <= 0 || $add_maxId <= 0) && (!empty($_SESSION['minNum']) || !empty($_SESSION['maxNum']))) {
+        $tmin = $_SESSION['minNum'] ?? '';
+        $tmax = $_SESSION['maxNum'] ?? '';
+        $add_minId = ($tmin !== '') ? (int)$tmin : ($tmax !== '' ? (int)$tmax : 0);
+        $add_maxId = ($tmax !== '') ? (int)$tmax : ($tmin !== '' ? (int)$tmin : 0);
+    }
+
+    if ($add_minId > 0 && $add_maxId > 0) {
+        // Normalize order
+        if ($add_minId > $add_maxId) { $tmp = $add_minId; $add_minId = $add_maxId; $add_maxId = $tmp; }
+        if ($add_minId === $add_maxId) {
+            $sql  = "SELECT * FROM strains WHERE Strain = :minNum ORDER BY Strain ASC LIMIT :startval, :limitval";
+            $sql2 = "SELECT COUNT(Strain) FROM strains WHERE Strain = :minNum";
+        } else {
+            $sql  = "SELECT * FROM strains WHERE Strain BETWEEN :minNum AND :maxNum ORDER BY Strain ASC LIMIT :startval, :limitval";
+            $sql2 = "SELECT COUNT(Strain) FROM strains WHERE Strain BETWEEN :minNum AND :maxNum";
+        }
+        // expose to parameter binding later
+        $minNum = $add_minId;
+        $maxNum = $add_maxId;
+    } else {
+        $_SESSION['feedback_type'] = 'error';
+        $_SESSION['feedback_message'] = 'No strains were added.';
+        return;
+    }
 }
 //End List inserted strains
 
@@ -399,70 +417,70 @@ if($sql && $sql2){ // Make sure both SQL strings are set before proceeding
 
         if ($is_signature_only) {
             // Only signature parameter is needed
-            $params_total[':sign1'] = $sign1param;
+            $params_total['sign1'] = $sign1param;
         } else {
             // --- Bind parameters for ANY combination (Keywords, Numbers, Signature) ---
 
             // Bind keyword parameters IF they have values
             if (!empty($term1)) {
                 $term1param = '%' . $term1 . '%';
-                $params_total[':term1'] = $term1param;
-                $params_total[':commentterm1'] = $term1param;
+                $params_total['term1'] = $term1param;
+                $params_total['commentterm1'] = $term1param;
             }
             if (!empty($term2)) {
                 $term2param = '%' . $term2 . '%';
-                $params_total[':term2'] = $term2param;
-                $params_total[':commentterm2'] = $term2param;
+                $params_total['term2'] = $term2param;
+                $params_total['commentterm2'] = $term2param;
             }
             if (!empty($term3)) {
                 $term3param = '%' . $term3 . '%';
-                $params_total[':term3'] = $term3param;
-                $params_total[':commentterm3'] = $term3param;
+                $params_total['term3'] = $term3param;
+                $params_total['commentterm3'] = $term3param;
             }
             if (!empty($term4)) {
                 $term4param = '%' . $term4 . '%';
-                $params_total[':term4'] = $term4param;
-                $params_total[':commentterm4'] = $term4param;
+                $params_total['term4'] = $term4param;
+                $params_total['commentterm4'] = $term4param;
             }
             if (!empty($notterm1)) {
                 $notterm1param = '%' . $notterm1 . '%';
-                $params_total[':notterm1'] = $notterm1param;
-                $params_total[':commentnotterm1'] = $notterm1param;
+                $params_total['notterm1'] = $notterm1param;
+                $params_total['commentnotterm1'] = $notterm1param;
             }
             if (!empty($notterm2)) {
                 $notterm2param = '%' . $notterm2 . '%';
-                $params_total[':notterm2'] = $notterm2param;
-                $params_total[':commentnotterm2'] = $notterm2param;
+                $params_total['notterm2'] = $notterm2param;
+                $params_total['commentnotterm2'] = $notterm2param;
             }
             if (!empty($notterm3)) {
                 $notterm3param = '%' . $notterm3 . '%';
-                $params_total[':notterm3'] = $notterm3param;
-                $params_total[':commentnotterm3'] = $notterm3param;
+                $params_total['notterm3'] = $notterm3param;
+                $params_total['commentnotterm3'] = $notterm3param;
             }
             if (!empty($notterm4)) {
                 $notterm4param = '%' . $notterm4 . '%';
-                $params_total[':notterm4'] = $notterm4param;
-                $params_total[':commentnotterm4'] = $notterm4param;
+                $params_total['notterm4'] = $notterm4param;
+                $params_total['commentnotterm4'] = $notterm4param;
             }
 
             // Bind number parameters IF they have values
             if (!empty($minNum) || !empty($maxNum)) {
                 if (!empty($minNum) && !empty($maxNum) && $minNum > $maxNum) { // Inverted
-                    $params_total[':maxNum'] = (int) $maxNum;
-                    $params_total[':minNum'] = (int) $minNum;
+                    $params_total['maxNum'] = (int) $maxNum;
+                    $params_total['minNum'] = (int) $minNum;
                 } elseif (!empty($minNum) && !empty($maxNum) && $minNum <= $maxNum) { // Normal
-                    $params_total[':minNum'] = (int) $minNum;
-                    $params_total[':maxNum'] = (int) $maxNum;
+                    $params_total['minNum'] = (int) $minNum;
+                    $params_total['maxNum'] = (int) $maxNum;
                 } elseif (!empty($minNum) && empty($maxNum)) { // Min only
-                    $params_total[':minNum'] = (int) $minNum;
+                    $params_total['minNum'] = (int) $minNum;
                 } elseif (empty($minNum) && !empty($maxNum)) { // Max only
-                    $params_total[':maxNum'] = (int) $maxNum;
+                    $params_total['maxNum'] = (int) $maxNum;
                 }
             }
 
             // Bind signature parameter IF it has a value
             if (!empty($sign1)) {
-                 $params_total[':sign1'] = $sign1param;
+                 $params_total['sign1'] = $sign1param;
             }
         } // End else for combined binding
     }
@@ -472,17 +490,27 @@ if($sql && $sql2){ // Make sure both SQL strings are set before proceeding
     // ** 3. Handle 'myNum' (single strain view from a link) **
     elseif ($_GET['mode'] == 'myNum') {
         $myNum = isset($_GET['myNum']) ? $_GET['myNum'] : 0; // Check isset
-        $params_total[':myNum'] = (int) $myNum;
+        $params_total['myNum'] = (int) $myNum;
     }
     // ** 4. Handle 'myList', 'add3', or 'edit2' (strain list) **
     elseif ($_GET['mode'] == 'myList' || $_GET['mode'] == 'add3' || $_GET['mode'] == 'edit2') {
+        // Two supported shapes here:
+        // - explicit list of IDs (myList / edit2)
+        // - numeric range (add3) exposed earlier via $minNum/$maxNum
         if (isset($list) && is_array($list) && isset($numberOfListParameters) && $numberOfListParameters > 0) {
             for($i = 1; $i <= $numberOfListParameters; $i++){
-                // Check if the list index exists before accessing it
                 if (isset($list[$i-1])) {
-                    $params_total[':list_' . $i] = (int) $list[$i-1];
+                    $params_total['list_' . $i] = (int) $list[$i-1];
                 }
             }
+        } elseif (isset($minNum) && $minNum !== '' && isset($maxNum) && $maxNum !== '') {
+            // bind range for add3 when recent_add/minNum-maxNum were used to build the SQL above
+            $params_total['minNum'] = (int)$minNum;
+            $params_total['maxNum'] = (int)$maxNum;
+        } elseif (isset($minNum) && $minNum !== '') {
+            $params_total['minNum'] = (int)$minNum;
+        } elseif (isset($maxNum) && $maxNum !== '') {
+            $params_total['maxNum'] = (int)$maxNum;
         }
     }
     // ** 5. Handle 'pedigree' (PHP loop view) **
@@ -496,7 +524,19 @@ if($sql && $sql2){ // Make sure both SQL strings are set before proceeding
 
 
 	//Execute total statement
-	$stmtTotal->execute($params_total);
+	// PDO::execute expects parameter array keys WITHOUT the leading colon.
+	// Filter the params so we only pass keys that exist as named placeholders in the SQL.
+	$placeholders_total = [];
+	if (isset($stmtTotal) && is_object($stmtTotal)) {
+	    $qs = $stmtTotal->queryString ?? ($sql2 ?? '');
+	    preg_match_all('/:([a-zA-Z0-9_]+)/', $qs, $m);
+	    $placeholders_total = $m[1] ?? [];
+	}
+	$exec_total_params = [];
+	foreach ($params_total as $k => $v) {
+	    if (in_array($k, $placeholders_total, true)) { $exec_total_params[$k] = $v; }
+	}
+	$stmtTotal->execute($exec_total_params);
 
     // Fetch total number of rows
     $total_records = $stmtTotal->fetchColumn();
@@ -523,12 +563,24 @@ if($sql && $sql2){ // Make sure both SQL strings are set before proceeding
 
     // Add LIMIT parameters, but only if the SQL query contains the LIMIT placeholders.
     if (strpos($sql, ':startval') !== false && strpos($sql, ':limitval') !== false) {
-        $params_limited[':startval'] = (int) $startval;
-        $params_limited[':limitval'] = (int) $limit;
+        // Again: keys without leading colon
+        $params_limited['startval'] = (int) $startval;
+        $params_limited['limitval'] = (int) $limit;
     }
 
     // Execute statement (Limited)
-    $stmt->execute($params_limited);
+    // Filter limited params to placeholders present in the limited query
+    $placeholders_limited = [];
+    if (isset($stmt) && is_object($stmt)) {
+        $qs2 = $stmt->queryString ?? ($sql ?? '');
+        preg_match_all('/:([a-zA-Z0-9_]+)/', $qs2, $m2);
+        $placeholders_limited = $m2[1] ?? [];
+    }
+    $exec_limited_params = [];
+    foreach ($params_limited as $k => $v) {
+        if (in_array($k, $placeholders_limited, true)) { $exec_limited_params[$k] = $v; }
+    }
+    $stmt->execute($exec_limited_params);
 
     // Fetch results
     $result = $stmt->fetchAll(PDO::FETCH_ASSOC);
@@ -569,7 +621,9 @@ if($sql && $sql2){ // Make sure both SQL strings are set before proceeding
 
 	// Print result text
 	if ($total_records == '0') {
-		echo "<span style='color: red'>Sorry, no matches. Try again</span>";
+		$_SESSION['feedback_type'] = 'error';
+		$_SESSION['feedback_message'] = 'Sorry, no matches. Try again.';
+		return;
 	} else {
 		$helpmessage2 = "<br><span style='font-weight: bold; color: red;'>Tip:</span> To see the information about a donor or recipient, click the link in the corresponding cell. Use ctrl+click (cmd+click in Mac OS) to open in a new tab.";
 	    // Always use the generic message
@@ -715,22 +769,26 @@ if (!empty($_SESSION['recent_add']) && is_array($_SESSION['recent_add'])) {
 						echo "</td>";
 
 						echo "<td align='right'>";
-							if ($row['Recipient'] == "0") {
+							// Only show DA prefix / link when Recipient is a positive integer
+							$recipientId = (int)($row['Recipient'] ?? 0);
+							if ($recipientId > 0) {
+								echo "<a href='index.php?mode=myNum&myNum=" . $recipientId . "' target='_blank' title='View DA" . $recipientId . " in a new tab'>DA" . $recipientId . "</a>";
+								$csv_output .= "DA" . $recipientId . "; ";
+							} else {
 								echo "";
 								$csv_output .= "; ";
-							} else {
-								echo "<a href='index.php?mode=myNum&myNum=" . $row['Recipient'] . "' target='_blank' title='View DA" . $row['Recipient']. " in a new tab'>DA" . $row['Recipient'] . "</a>"; // Added target='_blank'
-								$csv_output .= "DA" . $row['Recipient'] . "; ";
 							}
 						echo "</td>";
 
 						echo "<td align='right'>";
-							if ($row['Donor'] == "0") {
+							// Only show DA prefix / link when Donor is a positive integer
+							$donorId = (int)($row['Donor'] ?? 0);
+							if ($donorId > 0) {
+								echo "<a href='index.php?mode=myNum&myNum=" . $donorId . "' target='_blank' title='View DA" . $donorId . " in a new tab'>DA" . $donorId . "</a>";
+								$csv_output .= "DA" . $donorId . "; ";
+							} else {
 								echo "";
 								$csv_output .= "; ";
-							} else {
-								echo "<a href='index.php?mode=myNum&myNum=" . $row['Donor'] . "' target='_blank' title='View DA" . $row['Donor'] . " in a new tab'>DA" . $row['Donor'] . "</a>"; // Added target='_blank'
-								$csv_output .= "DA" . $row['Donor'] . "; ";
 							}
 						echo "</td>";
 
@@ -745,12 +803,14 @@ if (!empty($_SESSION['recent_add']) && is_array($_SESSION['recent_add'])) {
 						echo "</td>";
 
 						echo "<td>";
-							if ($row['Created'] == "0000-00-00 00:00:00"){
-								echo '';
-								$csv_output .= ";\n";
+							// Normalize sentinel timestamps to blank in both HTML and CSV
+							$createdRaw = (string)($row['Created'] ?? '');
+							if (in_array($createdRaw, $BLANK_CREATED, true) || $createdRaw === '') {
+							    echo '';
+							    $csv_output .= ";\n";
 							} else {
-								echo $row['Created'];
-								$csv_output .= $row['Created'] . "\n";
+							    echo htmlspecialchars($createdRaw, ENT_QUOTES, 'UTF-8');
+							    $csv_output .= $createdRaw . "\n";
 							}
 						echo "</td>";
 						echo "<td align='center'>";
