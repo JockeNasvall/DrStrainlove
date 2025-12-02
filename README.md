@@ -44,6 +44,7 @@ In  strainlove/
 - images
 - index.php - generates the web page
 - insert.php - contains the functions for adding new strains
+- lib/search_filters.php - shared helper loaded by index.php to build search SQL safely
 - js
 - login.php - A simple user verification system. Probably not very safe.
 - misc.html
