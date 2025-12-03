@@ -13,7 +13,7 @@ function render_intro($error = null) {
     if ($error) {
         echo '<div class="alert">' . htmlspecialchars($error) . '</div>';
     }
-    echo '<form method="POST"><p>This will read the current MySQL data and generate a downloadable ZIP.</p><button type="submit">Build &amp; download</button></form>';
+    echo '<form method="POST"><p>This will read the current MySQL data and generate a downloadable tar.gz.</p><button type="submit">Build &amp; download</button></form>';
     echo "</body></html>";
 }
 
