@@ -6,8 +6,11 @@
  */
 
 
-// Only allow insert if the user is a Superuser
-if($_SESSION['Usertype'] == 'Superuser') {
+require_once __DIR__ . '/permissions.php';
+
+
+// Only allow insert if the user can add strains
+if (can('add_strains')) {
 
 	$helpmessage = "Genotype field can not be empty.";
 
