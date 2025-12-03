@@ -8,8 +8,8 @@ function render_intro($error = null) {
     http_response_code(200);
     echo "<!DOCTYPE html>\n<html lang=\"en\">\n<head>\n<meta charset=\"UTF-8\">\n<title>Offline bundle builder</title>\n<style>body{font-family:Arial,Helvetica,sans-serif;margin:2rem;max-width:880px;}form{margin-top:1rem;padding:1rem;border:1px solid #ccc;background:#f9f9f9;}button{padding:0.6rem 1.4rem;font-size:1rem;}code{background:#f1f1f1;padding:2px 4px;border-radius:3px;}\n.alert{border:1px solid #d33;background:#ffecec;color:#900;padding:0.75rem;margin-bottom:1rem;}\n</style>\n</head><body>";
     echo "<h1>Offline search bundle</h1>";
-    echo "<p>This helper exports the <code>strains</code> table to CSV and JSON, builds a static search-only HTML page (no PHP or SQLite required for offline use), and packages everything as a <code>.tar.gz</code> download.</p>";
-    echo "<ol><li>Click <strong>Build &amp; download</strong>.</li><li>Your browser will ask where to save <code>strainlove_offline_bundle.tar.gz</code>.</li><li>Extract it and open <code>offline/index.html</code> directly in your browser to search offline.</li></ol>";
+    echo "<p>This helper exports the <code>strains</code> table to CSV and JSON, builds a static search-only HTML page, and packages everything as a <code>.tar.gz</code> download.</p>";
+    echo "<ol><li>Click <strong>Build &amp; download</strong>.</li><li>Your browser will download <code>strainlove_offline_bundle.tar.gz</code>.</li><li>Extract it and open <code>offline/index.html</code> directly in your browser to search offline.</li></ol>";
     if ($error) {
         echo '<div class="alert">' . htmlspecialchars($error) . '</div>';
     }
