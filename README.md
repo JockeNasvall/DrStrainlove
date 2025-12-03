@@ -3,13 +3,27 @@
 ## Description:
 A MySQL database for storing and retrieving information about bacterial strains, with a simple web interface. The database contains two tables: `strains` and `users`.
 
-The strain table has seven columns: `Strain`, `Genotype`, `Recipient`, `Donor`, `Comment`, `Signature` and `Created`.
+**Table overview**
+
+| Table | Purpose | Key columns |
+| --- | --- | --- |
+| `strains` | Stores strain records, one row per strain | `Strain` (INT, auto-increment PK, unique), `Genotype` (TEXT), `Recipient` (INT, nullable), `Donor` (INT, nullable), `Comment` (TEXT), `Signature` (VARCHAR(50), nullable), `Created` (TIMESTAMP, defaults to current time) |
+| `users` | Stores application users and roles | `Id` (TINYINT, auto-increment PK), `Username` (VARCHAR(20), unique), `Usertype` (ENUM('User','Superuser','Guest') default 'Guest'), `Password` (VARCHAR(255), defaults to empty string), `Signature` (VARCHAR(20)) |
+
+**Column notes**
 - `Strain` is a running number. Each new strain gets the next free number.
 - `Genotype` is a string of text describing the strain’s genotype.
 - `Recipient` and `Donor` are the parental strains used for construction of the strain.
 - `Comment` is a string of text where you can put whatever information you like that does not belong in the genotype. Details for how the strain was constructed, who you got the strain from, references, any important information on how to handle it etc.
 - `Signature` is an identifier of whoever saved the strain (i.e. initials, first name etc.)
 - `Created` is a timestamp for when the strain was created.
+- `Usertype` controls permissions: `Superuser` has full access, `User` can search/add/edit strains, and `Guest` is search-only.
+
+**Get the current schema**
+If you already have a database and want to confirm the exact structure before applying changes, this MySQL command will print the create statements for both tables:
+```
+SHOW CREATE TABLE strains; SHOW CREATE TABLE users;
+```
 
 ## Licence/Warranty/Support: 
 None. You are free to modify the included files in any way you want to suit your needs. If you break it, you fix it. Backup the database regularly to avoid loosing data.
@@ -30,6 +44,8 @@ In  strainlove/
 - images
 - index.php - generates the web page
 - insert.php - contains the functions for adding new strains
+- lib/input_sanitize.php - numeric clamping helpers used by actions.php and search.php for strain/ID inputs
+- lib/search_filters.php - legacy helper for building strain search SQL (not required by default)
 - js
 - login.php - A simple user verification system. Probably not very safe.
 - misc.html
@@ -41,6 +57,7 @@ In  strainlove/
 - search1.php
 - signup.php - contains functions to add new users
 - variant.css
+- offline/offline_bundle.php - builds a downloadable tar.gz containing CSV/JSON exports of the strains table plus a static search-only frontend
 
 
 
@@ -53,17 +70,48 @@ In  strainlove/
 ## Installation:
 Copy the strain server files to the server’s /var/www directory (if there already are some files there, make a new sub-directory, e.g. /var/www/strains. In this case you may need to edit some paths in some of the actual .php files). The “datalogin.php” file goes to /var/local/. Check that it’s working by browsing to the server’s (IP-) address from a web browser on another computer. If you made a subdirectory, add “/strains” after the server’s address (this may also require you to make some adjustments in some of the .php files). You should see the strain database’s web interface.
 
-Make the new MySQL database, the strain table, the user table and the first user (update the user information before running)
+Make the new MySQL database, the strain table, the user table and the first user (update the example values before running):
 ```
-mysql –u root –p
-create database strains;
-connect strains;
-create table strains (`Strain` INT(5) AUTO_INCREMENT UNIQUE KEY NOT NULL PRIMARY KEY,`Genotype` VARCHAR(999) NOT NULL, `Recipient` INT(5), `Donor` INT(5), `Comment` VARCHAR(999), `Signature` VARCHAR(50), `Created` TIMESTAMP DEFAULT NOW());
-create table users (`Id` tinyint(3) AUTO_INCREMENT UNIQUE KEY NOT NULL PRIMARY KEY,`Username` VARCHAR(20) NOT NULL, `Usertype` enum('User','Superuser') NOT NULL, `Password` VARCHAR(32) NOT NULL, `Signature` VARCHAR(20) NOT NULL, `FullName` VARCHAR(255) NOT NULL);
-connect strains;
-INSERT INTO `strains`.`users` (`Id`, `Username`, `Usertype`, `Password`,`Signature`,`FullName`) VALUES ('', '*******', 'Superuser', MD5('*******'),'********','******');
+mysql -u root -p
+CREATE DATABASE strains;
+USE strains;
+
+CREATE TABLE `strains` (
+  `Strain` int NOT NULL AUTO_INCREMENT,
+  `Genotype` text CHARACTER SET utf8mb3 COLLATE utf8mb3_unicode_ci,
+  `Recipient` int DEFAULT NULL,
+  `Donor` int DEFAULT NULL,
+  `Comment` text CHARACTER SET utf8mb3 COLLATE utf8mb3_unicode_ci,
+  `Signature` varchar(50) CHARACTER SET utf8mb3 COLLATE utf8mb3_unicode_ci DEFAULT NULL,
+  `Created` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (`Strain`),
+  UNIQUE KEY `Strain` (`Strain`),
+  KEY `idx_strains_recipient` (`Recipient`),
+  KEY `idx_strains_donor` (`Donor`)
+) ENGINE=InnoDB DEFAULT CHARSET=latin1;
+
+CREATE TABLE `users` (
+  `Id` tinyint NOT NULL AUTO_INCREMENT,
+  `Username` varchar(20) NOT NULL,
+  `Usertype` enum('User','Superuser','Guest') NOT NULL DEFAULT 'Guest',
+  `Password` varchar(255) NOT NULL DEFAULT '',
+  `Signature` varchar(20) NOT NULL,
+  PRIMARY KEY (`Id`),
+  UNIQUE KEY `Username` (`Username`)
+) ENGINE=InnoDB DEFAULT CHARSET=latin1;
+
+-- First superuser with an empty password placeholder
+INSERT INTO users (`Username`, `Usertype`, `Password`, `Signature`)
+VALUES ('admin', 'Superuser', '', 'admin');
 ```
-Any other users can be added through the web interface. Change the asterisks to your actual user information. Note the `Usertype` parameter. A `Superuser` will have full access to create and edit strains, while a `User` can only search for strains.
+Any other users can be added through the web interface. Update the example values (`admin`, signatures) as needed. Note the `Usertype` parameter: a `Superuser` has full access, a `User` can search/add/edit strains, and a `Guest` is limited to searching only.
+
+### Build an offline search-only bundle
+If you need a portable copy of the strains data (read-only), visit `offline/offline_bundle.php` in your browser while connected to the main server:
+1. Click **Build & download** to export the current `strains` table and bundle a static search-only frontend (no PHP or database needed offline).
+2. Save the generated `strainlove_offline_bundle.tar.gz` when your browser prompts for a location.
+3. Extract the archive and open `offline/index.html` directly in your browser to search locally. The bundle includes CSV, JSON, and a `strains.js` data file that loads even when your browser blocks `fetch` for `file://` URLs. The offline page supports pagination and highlights included keywords in genotype/comment fields to mirror the online search experience.
+
 
 ## Some useful MySQL commands 
 (be careful, make a backup of the existing database first):
