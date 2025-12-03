@@ -1,5 +1,6 @@
 <?php declare(strict_types=1);
 require_once __DIR__ . '/lib/input_sanitize.php';
+require_once __DIR__ . '/permissions.php';
 // Ensure a session is active (actions rely on session)
 if (session_status() !== PHP_SESSION_ACTIVE) { session_start(); }
 // Collect action-level errors in one place (avoid undefined variable warnings)
@@ -278,7 +279,7 @@ else {
 if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['form-type']) && $_POST['form-type'] == 'edit'){
 
     // Check user rights
-    if($_SESSION['Usertype'] == 'Superuser') {
+    if (can('edit_strains')) {
         // Find out how many records there are to update
         $size = count($_POST['Genotype']);
 
@@ -341,14 +342,14 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['form-type']) && $_POST
             $dbh->rollBack();
             $transaction_fail = true;
         }
-    }
+    } else { http_response_code(403); exit('Forbidden'); }
 }
 
 
 // DO ADD (This block processes the add strain form submission)
 if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['form-type']) && $_POST['form-type'] == 'add' && isset($_POST['submit'])){
 
-    if($_SESSION['Usertype'] == 'Superuser') {
+    if (can('add_strains')) {
         $num_lines = count($_POST["txtGenotype"]);
         $_SESSION["Line"] = $num_lines;
 
@@ -509,13 +510,14 @@ $nInserted++;                            // <<< count successful rows
             header("Location: index.php?mode=add&Line=" . ($_SESSION["Line"] ?? 1) . $dbg);
             exit;
         }
-    }
+    } else { http_response_code(403); exit('Forbidden'); }
 }
 
 
 // DO UPDATE LINES (On Add Strain page)
 if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['form-type']) && $_POST['form-type'] == 'add' && isset($_POST['update_lines'])){
-	$num_lines = count($_POST["txtGenotype"]);
+        if (!can('add_strains')) { http_response_code(403); exit('Forbidden'); }
+        $num_lines = count($_POST["txtGenotype"]);
 
 	unset($_SESSION["txtGenotype"]);
 	unset($_SESSION["txtDonor"]);
@@ -540,7 +542,8 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['form-type']) && $_POST
 // DO RESET INPUT (On Add Strain page)
 if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['form-type']) && $_POST['form-type'] == 'add' && isset($_POST['reset'])){
 
-	unset($_SESSION["txtGenotype"]);
+        if (!can('add_strains')) { http_response_code(403); exit('Forbidden'); }
+        unset($_SESSION["txtGenotype"]);
 	unset($_SESSION["txtDonor"]);
 	unset($_SESSION["txtRecipient"]);
 	unset($_SESSION["txtComment"]);
@@ -593,11 +596,11 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['form-type']) && $_POST
 		$validation['password'] = 0;
 	}
 
-	// Check that type is one of 'User' or 'Superuser'
-	if (!($usertype == 'Superuser' OR $usertype == 'User')) {
-		$goAhead = FALSE;
-		$errorMessage .= "User Type can only be User or Superuser<br>";
-	}
+        // Check that type is one of the allowed roles
+        if (!in_array($usertype, allowed_roles(), true)) {
+                $goAhead = FALSE;
+                $errorMessage .= "User Type must be Guest, User or Superuser<br>";
+        }
 
 	// Check if username already exists
 	if(user_exists($username, "username")){
