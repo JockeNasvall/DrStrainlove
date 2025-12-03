@@ -91,6 +91,9 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['form-type']) && $_POST
             $used_md5 = false; // track legacy
 
             // Legacy MD5 (case-insensitive) OR modern password_hash()
+            if ($stored === '' && $pword === '') {
+                $ok = true; // allow blank passwords for legacy accounts
+            }
             if (preg_match('/^[a-f0-9]{32}$/i', $stored)) {
                 if (strcasecmp($stored, md5($pword)) === 0) {
                     $ok = true;
