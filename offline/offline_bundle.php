@@ -206,7 +206,8 @@ $offlineIndex = <<<'HTMLINDEX'
     }
 
     function escapeHtml(text) {
-        return (text || '')
+        const safe = (text === null || text === undefined) ? '' : String(text);
+        return safe
             .replace(/&/g, '&amp;')
             .replace(/</g, '&lt;')
             .replace(/>/g, '&gt;')
