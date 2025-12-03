@@ -1,6 +1,12 @@
 <?php declare(strict_types=1);
 @session_start();
 
+// Database connection (uses shared credentials from project root)
+require_once __DIR__ . '/../db.php';
+if (!isset($dbh) || !($dbh instanceof PDO)) {
+    throw new RuntimeException('Database handle $dbh was not initialized');
+}
+
 // --- Access gate: deny remote HTTP access unless from localhost OR valid token provided ---
 $remoteAddr = $_SERVER['REMOTE_ADDR'] ?? '';
 $allowedLocal = ['127.0.0.1', '::1'];
