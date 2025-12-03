@@ -57,7 +57,7 @@ In  strainlove/
 - search1.php
 - signup.php - contains functions to add new users
 - variant.css
-- tools/offline_bundle.php - builds a downloadable tar.gz containing CSV/JSON exports of the strains table plus a static search-only frontend
+- offline/offline_bundle.php - builds a downloadable tar.gz containing CSV/JSON exports of the strains table plus a static search-only frontend
 
 
 
@@ -107,7 +107,7 @@ VALUES ('admin', 'Superuser', '', 'admin');
 Any other users can be added through the web interface. Update the example values (`admin`, signatures) as needed. Note the `Usertype` parameter: a `Superuser` has full access, a `User` can search/add/edit strains, and a `Guest` is limited to searching only.
 
 ### Build an offline search-only bundle
-If you need a portable copy of the strains data (read-only), visit `tools/offline_bundle.php` in your browser while connected to the main server:
+If you need a portable copy of the strains data (read-only), visit `offline/offline_bundle.php` in your browser while connected to the main server:
 1. Click **Build & download** to export the current `strains` table and bundle a static search-only frontend (no PHP or database needed offline).
 2. Save the generated `strainlove_offline_bundle.tar.gz` when your browser prompts for a location.
 3. Extract the archive and open `offline/index.html` directly in your browser to search locally. The bundle includes CSV, JSON, and a `strains.js` data file that loads even when your browser blocks `fetch` for `file://` URLs.
