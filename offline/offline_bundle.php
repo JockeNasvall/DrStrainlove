@@ -8,12 +8,12 @@ function render_intro($error = null) {
     http_response_code(200);
     echo "<!DOCTYPE html>\n<html lang=\"en\">\n<head>\n<meta charset=\"UTF-8\">\n<title>Offline bundle builder</title>\n<style>body{font-family:Arial,Helvetica,sans-serif;margin:2rem;max-width:880px;}form{margin-top:1rem;padding:1rem;border:1px solid #ccc;background:#f9f9f9;}button{padding:0.6rem 1.4rem;font-size:1rem;}code{background:#f1f1f1;padding:2px 4px;border-radius:3px;}\n.alert{border:1px solid #d33;background:#ffecec;color:#900;padding:0.75rem;margin-bottom:1rem;}\n</style>\n</head><body>";
     echo "<h1>Offline search bundle</h1>";
-    echo "<p>This helper exports the <code>strains</code> table to CSV and JSON, builds a static search-only HTML page, and packages everything as a <code>.tar.gz</code> download.</p>";
-    echo "<ol><li>Click <strong>Build &amp; download</strong>.</li><li>Your browser will download <code>strainlove_offline_bundle.tar.gz</code>.</li><li>Extract it and open <code>offline/index.html</code> directly in your browser to search offline.</li></ol>";
+    echo "<p>This helper exports the <code>strains</code> table to CSV and JSON, builds a static search-only HTML page (no PHP or SQLite required for offline use), and packages everything as a <code>.tar.gz</code> download.</p>";
+    echo "<ol><li>Click <strong>Build &amp; download</strong>.</li><li>Your browser will ask where to save <code>strainlove_offline_bundle.tar.gz</code>.</li><li>Extract it and open <code>offline/index.html</code> directly in your browser to search offline.</li></ol>";
     if ($error) {
         echo '<div class="alert">' . htmlspecialchars($error) . '</div>';
     }
-    echo '<form method="POST"><p>This will read the current MySQL data and generate a downloadable tar.gz.</p><button type="submit">Build &amp; download</button></form>';
+    echo '<form method="POST"><p>This will read the current MySQL data and generate a downloadable ZIP.</p><button type="submit">Build &amp; download</button></form>';
     echo "</body></html>";
 }
 
@@ -104,6 +104,7 @@ $offlineIndex = <<<'HTMLINDEX'
         th{background:#f0f0f0;}
         .pager{margin-top:0.75rem;display:flex;gap:0.5rem;align-items:center;}
         .notice{background:#eef6ff;border:1px solid #b5d2ff;padding:0.65rem;margin-bottom:0.75rem;}
+        mark{background:#fff7a8;padding:0 2px;}
     </style>
 </head>
 <body>
@@ -204,6 +205,27 @@ $offlineIndex = <<<'HTMLINDEX'
         return (val || '').toString().toLowerCase();
     }
 
+    function escapeHtml(text) {
+        return (text || '')
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;')
+            .replace(/'/g, '&#39;');
+    }
+
+    function highlight(text, terms) {
+        if (!terms.length || !text) return escapeHtml(text).replace(/\n/g, '<br>');
+        const escaped = escapeHtml(text);
+        try {
+            const pattern = terms.map(t => t.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|');
+            const regex = new RegExp(`(${pattern})`, 'gi');
+            return escaped.replace(regex, '<mark>$1</mark>').replace(/\n/g, '<br>');
+        } catch (e) {
+            return escaped.replace(/\n/g, '<br>');
+        }
+    }
+
     function matchesTerms(text, terms) {
         const hay = normalize(text);
         return terms.every(term => hay.includes(term));
@@ -276,20 +298,24 @@ $offlineIndex = <<<'HTMLINDEX'
         const totalPages = Math.max(1, Math.ceil(total / filters.limit));
         const page = pageReset ? 1 : Math.min(filters.page, totalPages);
 
-        summaryEl.textContent = `${Math.min(filters.limit, filtered.length)} results shown (${total} total).`;
-
         const offset = (page - 1) * filters.limit;
         const pageRows = filtered.slice(offset, offset + filters.limit);
 
+        const includeHighlight = filters.includeTerms;
+
+        summaryEl.textContent = total
+            ? `Showing ${offset + 1}-${Math.min(offset + filters.limit, total)} of ${total} matches.`
+            : 'No results found.';
+
         tbody.innerHTML = pageRows.map(r => `
             <tr>
-                <td>${r.Strain}</td>
-                <td>${(r.Genotype || '').replace(/\n/g, '<br>')}</td>
-                <td>${r.Recipient ?? ''}</td>
-                <td>${r.Donor ?? ''}</td>
-                <td>${(r.Comment || '').replace(/\n/g, '<br>')}</td>
-                <td>${r.Signature || ''}</td>
-                <td>${r.Created || ''}</td>
+                <td>${escapeHtml(r.Strain)}</td>
+                <td>${highlight(r.Genotype, includeHighlight)}</td>
+                <td>${escapeHtml(r.Recipient ?? '')}</td>
+                <td>${escapeHtml(r.Donor ?? '')}</td>
+                <td>${highlight(r.Comment, includeHighlight)}</td>
+                <td>${escapeHtml(r.Signature || '')}</td>
+                <td>${escapeHtml(r.Created || '')}</td>
             </tr>
         `).join('') || '<tr><td colspan="7">No results found.</td></tr>';
 

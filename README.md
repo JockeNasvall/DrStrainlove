@@ -110,7 +110,7 @@ Any other users can be added through the web interface. Update the example value
 If you need a portable copy of the strains data (read-only), visit `offline/offline_bundle.php` in your browser while connected to the main server:
 1. Click **Build & download** to export the current `strains` table and bundle a static search-only frontend (no PHP or database needed offline).
 2. Save the generated `strainlove_offline_bundle.tar.gz` when your browser prompts for a location.
-3. Extract the archive and open `offline/index.html` directly in your browser to search locally. The bundle includes CSV, JSON, and a `strains.js` data file that loads even when your browser blocks `fetch` for `file://` URLs.
+3. Extract the archive and open `offline/index.html` directly in your browser to search locally. The bundle includes CSV, JSON, and a `strains.js` data file that loads even when your browser blocks `fetch` for `file://` URLs. The offline page supports pagination and highlights included keywords in genotype/comment fields to mirror the online search experience.
 
 
 ## Some useful MySQL commands 
