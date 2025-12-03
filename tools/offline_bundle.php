@@ -1,6 +1,6 @@
 <?php
-// Helper that exports the MySQL strains table to CSV, converts it to SQLite,
-// and packages an offline search-only frontend for download.
+// Helper that exports the MySQL strains table to CSV/JSON and packages a
+// static, search-only HTML frontend for download.
 
 require_once __DIR__ . '/../db.php';
 
@@ -8,8 +8,8 @@ function render_intro($error = null) {
     http_response_code(200);
     echo "<!DOCTYPE html>\n<html lang=\"en\">\n<head>\n<meta charset=\"UTF-8\">\n<title>Offline bundle builder</title>\n<style>body{font-family:Arial,Helvetica,sans-serif;margin:2rem;max-width:880px;}form{margin-top:1rem;padding:1rem;border:1px solid #ccc;background:#f9f9f9;}button{padding:0.6rem 1.4rem;font-size:1rem;}code{background:#f1f1f1;padding:2px 4px;border-radius:3px;}\n.alert{border:1px solid #d33;background:#ffecec;color:#900;padding:0.75rem;margin-bottom:1rem;}\n</style>\n</head><body>";
     echo "<h1>Offline search bundle</h1>";
-    echo "<p>This helper exports the <code>strains</code> table to CSV, converts it to a bundled SQLite database, and builds a small search-only frontend that you can download as a ZIP file.</p>";
-    echo "<ol><li>Click <strong>Build &amp; download</strong>.</li><li>Your browser will ask where to save <code>strainlove_offline_bundle.zip</code>.</li><li>Unzip it and run <code>php -S localhost:8000</code> inside the extracted folder to use the offline search page.</li></ol>";
+    echo "<p>This helper exports the <code>strains</code> table to CSV and JSON, builds a static search-only HTML page (no PHP or SQLite required for offline use), and packages everything as a <code>.tar.gz</code> download.</p>";
+    echo "<ol><li>Click <strong>Build &amp; download</strong>.</li><li>Your browser will ask where to save <code>strainlove_offline_bundle.tar.gz</code>.</li><li>Extract it and open <code>offline/index.html</code> directly in your browser to search offline.</li></ol>";
     if ($error) {
         echo '<div class="alert">' . htmlspecialchars($error) . '</div>';
     }
@@ -22,13 +22,8 @@ if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
     exit;
 }
 
-if (!class_exists('ZipArchive')) {
-    render_intro('ZipArchive extension is not available on this server.');
-    exit;
-}
-
-if (!class_exists('SQLite3')) {
-    render_intro('SQLite3 extension is required to build the offline database.');
+if (!class_exists('PharData')) {
+    render_intro('Phar extension is required to build the downloadable archive.');
     exit;
 }
 
@@ -42,8 +37,8 @@ if (!is_dir($offlineDir) && !mkdir($offlineDir, 0700, true)) {
 }
 
 $csvPath = $offlineDir . '/strains.csv';
-$sqlitePath = $offlineDir . '/strains.sqlite';
-$indexPath = $offlineDir . '/index.php';
+$jsonPath = $offlineDir . '/strains.json';
+$indexPath = $offlineDir . '/index.html';
 $notePath = $offlineDir . '/README.txt';
 
 function clean_up_temp($path) {
@@ -65,6 +60,8 @@ function clean_up_temp($path) {
 }
 
 // Fetch data from MySQL and write CSV
+
+// Fetch data from MySQL and write CSV + JSON
 $csvHandle = fopen($csvPath, 'w');
 fputcsv($csvHandle, ['Strain', 'Genotype', 'Recipient', 'Donor', 'Comment', 'Signature', 'Created']);
 
@@ -83,198 +80,67 @@ while ($row = $stmt->fetch(PDO::FETCH_ASSOC)) {
     ]);
 }
 fclose($csvHandle);
+file_put_contents($jsonPath, json_encode($rows, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES));
 
-// Build SQLite database
-$sqlite = new SQLite3($sqlitePath);
-$sqlite->exec('PRAGMA journal_mode = OFF');
-$sqlite->exec('PRAGMA synchronous = OFF');
-$sqlite->exec('CREATE TABLE strains (Strain INTEGER PRIMARY KEY, Genotype TEXT, Recipient INTEGER, Donor INTEGER, Comment TEXT, Signature TEXT, Created TEXT)');
-$sqlite->exec('CREATE INDEX idx_strains_recipient ON strains (Recipient)');
-$sqlite->exec('CREATE INDEX idx_strains_donor ON strains (Donor)');
-$sqlite->exec('BEGIN');
-$insert = $sqlite->prepare('INSERT INTO strains (Strain, Genotype, Recipient, Donor, Comment, Signature, Created) VALUES (:Strain, :Genotype, :Recipient, :Donor, :Comment, :Signature, :Created)');
-foreach ($rows as $row) {
-    $insert->bindValue(':Strain', (int)$row['Strain'], SQLITE3_INTEGER);
-    $insert->bindValue(':Genotype', $row['Genotype'], SQLITE3_TEXT);
-    $insert->bindValue(':Recipient', $row['Recipient'] === null ? null : (int)$row['Recipient'], SQLITE3_INTEGER);
-    $insert->bindValue(':Donor', $row['Donor'] === null ? null : (int)$row['Donor'], SQLITE3_INTEGER);
-    $insert->bindValue(':Comment', $row['Comment'], SQLITE3_TEXT);
-    $insert->bindValue(':Signature', $row['Signature'], SQLITE3_TEXT);
-    $insert->bindValue(':Created', $row['Created'], SQLITE3_TEXT);
-    $insert->execute();
-}
-$sqlite->exec('COMMIT');
-$sqlite->close();
-
-// Offline index file (search-only frontend)
-$offlineIndex = <<<'PHPINDEX'
-<?php
-// Offline search-only frontend using the exported SQLite database.
-$dsn = 'sqlite:' . __DIR__ . '/strains.sqlite';
-$pdo = new PDO($dsn);
-$pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
-
-function read_value($key, $default = '') {
-    return isset($_GET[$key]) ? trim($_GET[$key]) : $default;
-}
-
-$limit = (int)(read_value('limit', 100));
-if ($limit <= 0 || $limit > 1000) {
-    $limit = 100;
-}
-$page = (int)(read_value('page', 1));
-if ($page <= 0) {
-    $page = 1;
-}
-$offset = ($page - 1) * $limit;
-
-$searchgenotype = isset($_GET['check']) ? (isset($_GET['check']['genotype']) ? 1 : 0) : 1; // default on
-$searchcomment = isset($_GET['check']['comment']) ? 1 : 0;
-$includeFields = [];
-if ($searchgenotype) $includeFields[] = 'Genotype';
-if ($searchcomment) $includeFields[] = 'Comment';
-if (!$includeFields) {
-    $includeFields = ['Genotype'];
-}
-
-$terms = [];
-for ($i = 1; $i <= 4; $i++) {
-    $val = read_value('term' . $i);
-    if ($val !== '') {
-        $terms[] = $val;
-    }
-}
-
-$notTerms = [];
-for ($i = 1; $i <= 4; $i++) {
-    $val = read_value('notterm' . $i);
-    if ($val !== '') {
-        $notTerms[] = $val;
-    }
-}
-
-$minNum = read_value('minNum');
-$maxNum = read_value('maxNum');
-$signature = read_value('sign1');
-
-$conditions = [];
-$params = [];
-
-foreach ($terms as $idx => $term) {
-    $likes = [];
-    foreach ($includeFields as $field) {
-        $param = ':term' . $idx . '_' . $field;
-        $likes[] = "$field LIKE $param";
-        $params[$param] = '%' . $term . '%';
-    }
-    $conditions[] = '(' . implode(' OR ', $likes) . ')';
-}
-
-foreach ($notTerms as $idx => $term) {
-    $likes = [];
-    foreach ($includeFields as $field) {
-        $param = ':notterm' . $idx . '_' . $field;
-        $likes[] = "$field LIKE $param";
-        $params[$param] = '%' . $term . '%';
-    }
-    $conditions[] = 'NOT (' . implode(' OR ', $likes) . ')';
-}
-
-if ($minNum !== '' && ctype_digit($minNum)) {
-    $conditions[] = 'Strain >= :minNum';
-    $params[':minNum'] = (int)$minNum;
-}
-if ($maxNum !== '' && ctype_digit($maxNum)) {
-    $conditions[] = 'Strain <= :maxNum';
-    $params[':maxNum'] = (int)$maxNum;
-}
-if ($signature !== '') {
-    $conditions[] = 'Signature LIKE :signature';
-    $params[':signature'] = '%' . $signature . '%';
-}
-
-$where = $conditions ? ('WHERE ' . implode(' AND ', $conditions)) : '';
-
-$countSql = "SELECT COUNT(*) FROM strains $where";
-$countStmt = $pdo->prepare($countSql);
-foreach ($params as $name => $value) {
-    $countStmt->bindValue($name, $value, is_int($value) ? PDO::PARAM_INT : PDO::PARAM_STR);
-}
-$countStmt->execute();
-$total = (int)$countStmt->fetchColumn();
-
-$sql = "SELECT Strain, Genotype, Recipient, Donor, Comment, Signature, Created FROM strains $where ORDER BY Strain ASC LIMIT :limit OFFSET :offset";
-$stmt = $pdo->prepare($sql);
-foreach ($params as $name => $value) {
-    $stmt->bindValue($name, $value, is_int($value) ? PDO::PARAM_INT : PDO::PARAM_STR);
-}
-$stmt->bindValue(':limit', $limit, PDO::PARAM_INT);
-$stmt->bindValue(':offset', $offset, PDO::PARAM_INT);
-$stmt->execute();
-$results = $stmt->fetchAll(PDO::FETCH_ASSOC);
-
-function h($v) { return htmlspecialchars((string)$v, ENT_QUOTES, 'UTF-8'); }
-
-?>
+// Offline index file (search-only frontend, static HTML + JS)
+$offlineIndex = <<<'HTMLINDEX'
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="UTF-8">
-<title>Strainlove offline search</title>
-<style>
-body{font-family:Arial,Helvetica,sans-serif;margin:1.5rem;}
-.container{display:flex;gap:2rem;align-items:flex-start;}
-form{min-width:320px;max-width:420px;padding:1rem;border:1px solid #ccc;background:#f9f9f9;}
-label{display:block;margin-bottom:0.35rem;}
-input[type=text]{width:100%;padding:0.35rem;margin:0.15rem 0;}
-input[type=checkbox]{margin-right:0.35rem;}
-button,input[type=submit]{padding:0.5rem 1rem;}
-table{border-collapse:collapse;width:100%;margin-top:1rem;}
-th,td{border:1px solid #ddd;padding:0.5rem;vertical-align:top;}
-th{background:#f0f0f0;}
-.pager{margin-top:0.75rem;display:flex;gap:0.5rem;align-items:center;}
-</style>
+    <meta charset="UTF-8">
+    <title>Strainlove offline search</title>
+    <style>
+        body{font-family:Arial,Helvetica,sans-serif;margin:1.5rem;}
+        .container{display:flex;gap:2rem;align-items:flex-start;}
+        form{min-width:320px;max-width:420px;padding:1rem;border:1px solid #ccc;background:#f9f9f9;}
+        label{display:block;margin-bottom:0.35rem;}
+        input[type=text]{width:100%;padding:0.35rem;margin:0.15rem 0;}
+        input[type=checkbox]{margin-right:0.35rem;}
+        button,input[type=submit]{padding:0.5rem 1rem;}
+        table{border-collapse:collapse;width:100%;margin-top:1rem;}
+        th,td{border:1px solid #ddd;padding:0.5rem;vertical-align:top;}
+        th{background:#f0f0f0;}
+        .pager{margin-top:0.75rem;display:flex;gap:0.5rem;align-items:center;}
+        .notice{background:#eef6ff;border:1px solid #b5d2ff;padding:0.65rem;margin-bottom:0.75rem;}
+    </style>
 </head>
 <body>
 <h1>Strainlove offline search</h1>
+<div class="notice">Search runs fully in your browser using <code>strains.json</code>. No PHP or database server is needed.</div>
 <div class="container">
-<form method="get">
+<form id="search-form">
     <h3>Search filters</h3>
-    <label><input type="checkbox" name="check[genotype]" <?php echo $searchgenotype ? 'checked' : ''; ?>>Genotype</label>
-    <label><input type="checkbox" name="check[comment]" <?php echo $searchcomment ? 'checked' : ''; ?>>Comment</label>
+    <label><input type="checkbox" name="check_genotype" checked>Genotype</label>
+    <label><input type="checkbox" name="check_comment">Comment</label>
 
     <p><strong>Include keywords</strong></p>
-    <?php for ($i = 1; $i <= 4; $i++): ?>
-        <input type="text" name="term<?php echo $i; ?>" value="<?php echo h(read_value('term' . $i)); ?>">
-    <?php endfor; ?>
+    <div id="include-terms"></div>
 
     <p><strong>Exclude keywords</strong></p>
-    <?php for ($i = 1; $i <= 4; $i++): ?>
-        <input type="text" name="notterm<?php echo $i; ?>" value="<?php echo h(read_value('notterm' . $i)); ?>">
-    <?php endfor; ?>
+    <div id="exclude-terms"></div>
 
     <label>Strain number between</label>
     <div style="display:flex;gap:0.5rem;">
-        <input type="text" name="minNum" value="<?php echo h($minNum); ?>" placeholder="Min">
-        <input type="text" name="maxNum" value="<?php echo h($maxNum); ?>" placeholder="Max">
+        <input type="text" name="minNum" placeholder="Min">
+        <input type="text" name="maxNum" placeholder="Max">
     </div>
 
     <label>Signature
-        <input type="text" name="sign1" value="<?php echo h($signature); ?>">
+        <input type="text" name="sign1">
     </label>
     <label>Limit results
-        <input type="text" name="limit" value="<?php echo h($limit); ?>">
+        <input type="text" name="limit" value="100">
     </label>
 
     <input type="hidden" name="page" value="1">
     <div style="margin-top:0.75rem; display:flex; gap:0.5rem;">
         <input type="submit" value="Search">
-        <a href="index.php" style="display:inline-block;padding:0.55rem 1rem;border:1px solid #ccc;background:#eee;text-decoration:none;">Reset</a>
+        <button type="button" id="reset-btn">Reset</button>
     </div>
 </form>
 
-<div style="flex:1;">
-    <p><strong><?php echo count($results); ?></strong> results shown (<?php echo $total; ?> total).</p>
+<div style="flex:1;" id="results-pane">
+    <p id="summary">Loading data...</p>
     <table>
         <thead>
             <tr>
@@ -287,60 +153,202 @@ th{background:#f0f0f0;}
                 <th>Created</th>
             </tr>
         </thead>
-        <tbody>
-            <?php if (!$results): ?>
-                <tr><td colspan="7">No results found.</td></tr>
-            <?php else: ?>
-                <?php foreach ($results as $row): ?>
-                    <tr>
-                        <td><?php echo h($row['Strain']); ?></td>
-                        <td><?php echo nl2br(h($row['Genotype'])); ?></td>
-                        <td><?php echo h($row['Recipient']); ?></td>
-                        <td><?php echo h($row['Donor']); ?></td>
-                        <td><?php echo nl2br(h($row['Comment'])); ?></td>
-                        <td><?php echo h($row['Signature']); ?></td>
-                        <td><?php echo h($row['Created']); ?></td>
-                    </tr>
-                <?php endforeach; ?>
-            <?php endif; ?>
+        <tbody id="results-body">
+            <tr><td colspan="7">Loading...</td></tr>
         </tbody>
     </table>
-    <?php if ($total > $limit): ?>
-        <div class="pager">
-            <?php if ($page > 1): ?>
-                <a href="?<?php echo h(http_build_query(array_merge($_GET, ['page' => $page - 1]))); ?>">&laquo; Prev</a>
-            <?php endif; ?>
-            <span>Page <?php echo $page; ?> of <?php echo max(1, ceil($total / $limit)); ?></span>
-            <?php if ($offset + $limit < $total): ?>
-                <a href="?<?php echo h(http_build_query(array_merge($_GET, ['page' => $page + 1]))); ?>">Next &raquo;</a>
-            <?php endif; ?>
-        </div>
-    <?php endif; ?>
+    <div class="pager" id="pager" style="display:none;"></div>
 </div>
 </div>
+
+<script>
+(function() {
+    const includeContainer = document.getElementById('include-terms');
+    const excludeContainer = document.getElementById('exclude-terms');
+    for (let i = 1; i <= 4; i++) {
+        includeContainer.insertAdjacentHTML('beforeend', `<input type="text" name="term${i}" placeholder="Include term ${i}">`);
+        excludeContainer.insertAdjacentHTML('beforeend', `<input type="text" name="notterm${i}" placeholder="Exclude term ${i}">`);
+    }
+
+    const form = document.getElementById('search-form');
+    const resetBtn = document.getElementById('reset-btn');
+    const summaryEl = document.getElementById('summary');
+    const tbody = document.getElementById('results-body');
+    const pager = document.getElementById('pager');
+    let data = [];
+
+    function loadData() {
+        fetch('strains.json')
+            .then(resp => resp.json())
+            .then(rows => {
+                data = rows;
+                summaryEl.textContent = `${data.length} rows loaded.`;
+                render();
+            })
+            .catch(err => {
+                summaryEl.textContent = 'Failed to load strains.json: ' + err;
+                tbody.innerHTML = '<tr><td colspan="7">Unable to load data.</td></tr>';
+            });
+    }
+
+    function normalize(val) {
+        return (val || '').toString().toLowerCase();
+    }
+
+    function matchesTerms(text, terms) {
+        const hay = normalize(text);
+        return terms.every(term => hay.includes(term));
+    }
+
+    function matchesExclude(text, terms) {
+        const hay = normalize(text);
+        return !terms.some(term => hay.includes(term));
+    }
+
+    function parseFilters() {
+        const formData = new FormData(form);
+        const includeTerms = [];
+        const excludeTerms = [];
+        for (let i = 1; i <= 4; i++) {
+            const inc = normalize(formData.get(`term${i}`));
+            const exc = normalize(formData.get(`notterm${i}`));
+            if (inc) includeTerms.push(inc);
+            if (exc) excludeTerms.push(exc);
+        }
+
+        const searchGenotype = formData.get('check_genotype') !== null;
+        const searchComment = formData.get('check_comment') !== null;
+        const fields = [];
+        if (searchGenotype) fields.push('Genotype');
+        if (searchComment) fields.push('Comment');
+        if (fields.length === 0) fields.push('Genotype');
+
+        const minNum = parseInt(formData.get('minNum'), 10);
+        const maxNum = parseInt(formData.get('maxNum'), 10);
+        const signature = normalize(formData.get('sign1'));
+        let limit = parseInt(formData.get('limit'), 10);
+        if (!Number.isFinite(limit) || limit <= 0 || limit > 1000) limit = 100;
+        let page = parseInt(formData.get('page'), 10);
+        if (!Number.isFinite(page) || page <= 0) page = 1;
+
+        return { includeTerms, excludeTerms, fields, minNum, maxNum, signature, limit, page };
+    }
+
+    function rowMatches(row, filters) {
+        const targets = filters.fields.map(f => normalize(row[f] || ''));
+
+        if (filters.includeTerms.length && !filters.includeTerms.every(term => targets.some(t => t.includes(term)))) {
+            return false;
+        }
+        if (filters.excludeTerms.length && filters.excludeTerms.some(term => targets.some(t => t.includes(term)))) {
+            return false;
+        }
+
+        const strainNum = parseInt(row.Strain, 10);
+        if (Number.isFinite(filters.minNum) && strainNum < filters.minNum) return false;
+        if (Number.isFinite(filters.maxNum) && strainNum > filters.maxNum) return false;
+
+        if (filters.signature && !normalize(row.Signature).includes(filters.signature)) return false;
+
+        return true;
+    }
+
+    function render(pageReset=false) {
+        if (!data.length) {
+            tbody.innerHTML = '<tr><td colspan="7">No data loaded.</td></tr>';
+            pager.style.display = 'none';
+            return;
+        }
+
+        const filters = parseFilters();
+        const filtered = data.filter(row => rowMatches(row, filters));
+
+        const total = filtered.length;
+        const totalPages = Math.max(1, Math.ceil(total / filters.limit));
+        const page = pageReset ? 1 : Math.min(filters.page, totalPages);
+
+        summaryEl.textContent = `${Math.min(filters.limit, filtered.length)} results shown (${total} total).`;
+
+        const offset = (page - 1) * filters.limit;
+        const pageRows = filtered.slice(offset, offset + filters.limit);
+
+        tbody.innerHTML = pageRows.map(r => `
+            <tr>
+                <td>${r.Strain}</td>
+                <td>${(r.Genotype || '').replace(/\n/g, '<br>')}</td>
+                <td>${r.Recipient ?? ''}</td>
+                <td>${r.Donor ?? ''}</td>
+                <td>${(r.Comment || '').replace(/\n/g, '<br>')}</td>
+                <td>${r.Signature || ''}</td>
+                <td>${r.Created || ''}</td>
+            </tr>
+        `).join('') || '<tr><td colspan="7">No results found.</td></tr>';
+
+        if (total > filters.limit) {
+            pager.style.display = 'flex';
+            pager.innerHTML = '';
+            if (page > 1) {
+                const prev = document.createElement('a');
+                prev.href = '#';
+                prev.textContent = '« Prev';
+                prev.onclick = (e) => { e.preventDefault(); form.querySelector('input[name="page"]').value = page - 1; render(); };
+                pager.appendChild(prev);
+            }
+            const span = document.createElement('span');
+            span.textContent = `Page ${page} of ${totalPages}`;
+            pager.appendChild(span);
+            if (offset + filters.limit < total) {
+                const next = document.createElement('a');
+                next.href = '#';
+                next.textContent = 'Next »';
+                next.onclick = (e) => { e.preventDefault(); form.querySelector('input[name="page"]').value = page + 1; render(); };
+                pager.appendChild(next);
+            }
+        } else {
+            pager.style.display = 'none';
+        }
+    }
+
+    form.addEventListener('submit', function(ev) {
+        ev.preventDefault();
+        form.querySelector('input[name="page"]').value = 1;
+        render(true);
+    });
+
+    resetBtn.addEventListener('click', function() {
+        form.reset();
+        form.querySelector('input[name="page"]').value = 1;
+        render(true);
+    });
+
+    loadData();
+})();
+</script>
 </body>
 </html>
-PHPINDEX;
+HTMLINDEX;
 
 file_put_contents($indexPath, $offlineIndex);
 
-$noteText = "Strainlove offline bundle\n\nContents:\n- index.php: search-only frontend using PDO SQLite\n- strains.sqlite: exported data\n- strains.csv: raw export of the same rows\n\nUsage:\n1) Install PHP locally (no MySQL needed).\n2) In this folder, run: php -S localhost:8000\n3) Open http://localhost:8000 in your browser.\n\nSearch supports keyword include/exclude, genotype/comment toggles, strain number range, signature filter, limits, and pagination.\n\nData exported on: " . date('c') . "\n";
+$noteText = "Strainlove offline bundle\n\nContents:\n- index.html: search-only frontend (static HTML + JavaScript)\n- strains.json: exported data for the offline search UI\n- strains.csv: raw export of the same rows\n\nUsage:\n1) Extract the archive.\n2) Open offline/index.html in your browser (no PHP, SQLite, or MySQL needed).\n\nSearch supports keyword include/exclude, genotype/comment toggles, strain number range, signature filter, limits, and pagination.\n\nData exported on: " . date('c') . "\n";
 file_put_contents($notePath, $noteText);
 
-$zipPath = tempnam(sys_get_temp_dir(), 'strainlove_bundle_');
-$zipArchive = new ZipArchive();
-$zipArchive->open($zipPath, ZipArchive::OVERWRITE);
-$zipArchive->addFile($csvPath, 'offline/strains.csv');
-$zipArchive->addFile($sqlitePath, 'offline/strains.sqlite');
-$zipArchive->addFile($indexPath, 'offline/index.php');
-$zipArchive->addFile($notePath, 'offline/README.txt');
-$zipArchive->close();
+$tarPath = $bundleRoot . '/strainlove_offline_bundle.tar';
+$phar = new PharData($tarPath);
+$phar->addFile($csvPath, 'offline/strains.csv');
+$phar->addFile($jsonPath, 'offline/strains.json');
+$phar->addFile($indexPath, 'offline/index.html');
+$phar->addFile($notePath, 'offline/README.txt');
+$phar->compress(Phar::GZ);
+$gzPath = $tarPath . '.gz';
+unset($phar);
+@unlink($tarPath);
 
-header('Content-Type: application/zip');
-header('Content-Disposition: attachment; filename="strainlove_offline_bundle.zip"');
-header('Content-Length: ' . filesize($zipPath));
-readfile($zipPath);
+header('Content-Type: application/gzip');
+header('Content-Disposition: attachment; filename="strainlove_offline_bundle.tar.gz"');
+header('Content-Length: ' . filesize($gzPath));
+readfile($gzPath);
 
 clean_up_temp($bundleRoot);
-unlink($zipPath);
+unlink($gzPath);
 exit;
