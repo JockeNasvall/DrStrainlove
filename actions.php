@@ -89,10 +89,12 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['form-type']) && $_POST
         if ($user && isset($user['Password'])) {
             $stored   = (string)$user['Password'];
             $used_md5 = false; // track legacy
+            $used_blank = false; // track empty-password accounts
 
             // Legacy MD5 (case-insensitive) OR modern password_hash()
             if ($stored === '' && $pword === '') {
                 $ok = true; // allow blank passwords for legacy accounts
+                $used_blank = true;
             }
             if (preg_match('/^[a-f0-9]{32}$/i', $stored)) {
                 if (strcasecmp($stored, md5($pword)) === 0) {
@@ -118,7 +120,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['form-type']) && $_POST
 
             // important: force upgrade page if legacy md5 was used
             session_regenerate_id(true);
-            if (!empty($used_md5)) {
+            if (!empty($used_md5) || !empty($used_blank)) {
                 $_SESSION['needs_pw_upgrade'] = 1; // show upgrade banner/form
                 header('Location: index.php?mode=changePassword');
             } else {
