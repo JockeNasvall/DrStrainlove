@@ -1,9 +1,11 @@
 <?php
-/** 
+/**
  * File: search1.php
  * Cleaned: 2025-11-12
  * Description: Part of Dr Strainlove frontend.
  */
+
+require_once __DIR__ . '/permissions.php';
 
 
 $start_strain = 0;
@@ -716,9 +718,9 @@ if (!empty($_SESSION['recent_add']) && is_array($_SESSION['recent_add'])) {
 			echo "<form action='index.php?mode=myList' name='selectRow' method='post'>";
 				echo "<input type='submit' title='Show a table of only the selected strains' name='show' value='Show selected'/>";
 
-				if($_SESSION['Usertype'] == 'Superuser') {
-					echo "<input type='submit' title='Edit the selected strains' name='edit' value='Edit selected'/>";
-				}
+                                if (can('edit_strains')) {
+                                        echo "<input type='submit' title='Edit the selected strains' name='edit' value='Edit selected'/>";
+                                }
 
 				echo "<input type='submit' title='Open the selected strains in a printer-friendly table' name='print' value='print selected'/>";
                 echo "<input type='submit' title='Add selected strains to memory' name='store' value='Store in memory'/>";
