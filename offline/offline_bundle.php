@@ -8,12 +8,12 @@ function render_intro($error = null) {
     http_response_code(200);
     echo "<!DOCTYPE html>\n<html lang=\"en\">\n<head>\n<meta charset=\"UTF-8\">\n<title>Offline bundle builder</title>\n<style>body{font-family:Arial,Helvetica,sans-serif;margin:2rem;max-width:880px;}form{margin-top:1rem;padding:1rem;border:1px solid #ccc;background:#f9f9f9;}button{padding:0.6rem 1.4rem;font-size:1rem;}code{background:#f1f1f1;padding:2px 4px;border-radius:3px;}\n.alert{border:1px solid #d33;background:#ffecec;color:#900;padding:0.75rem;margin-bottom:1rem;}\n</style>\n</head><body>";
     echo "<h1>Offline search bundle</h1>";
-    echo "<p>This helper exports the <code>strains</code> table to CSV and JSON, builds a static search-only HTML page, and packages everything as a <code>.tar.gz</code> download.</p>";
-    echo "<ol><li>Click <strong>Build &amp; download</strong>.</li><li>Your browser will download <code>strainlove_offline_bundle.tar.gz</code>.</li><li>Extract it and open <code>offline/index.html</code> directly in your browser to search offline.</li></ol>";
+    echo "<p>This helper exports the <code>strains</code> table to CSV and JSON, builds a static search-only HTML page (no PHP or SQLite required for offline use), and packages everything as a <code>.tar.gz</code> download.</p>";
+    echo "<ol><li>Click <strong>Build &amp; download</strong>.</li><li>Your browser will ask where to save <code>strainlove_offline_bundle.tar.gz</code>.</li><li>Extract it and open <code>offline/index.html</code> directly in your browser to search offline.</li></ol>";
     if ($error) {
         echo '<div class="alert">' . htmlspecialchars($error) . '</div>';
     }
-    echo '<form method="POST"><p>This will read the current MySQL data and generate a downloadable tar.gz.</p><button type="submit">Build &amp; download</button></form>';
+    echo '<form method="POST"><p>This will read the current MySQL data and generate a downloadable <code>.tar.gz</code> archive.</p><button type="submit">Build &amp; download</button></form>';
     echo "</body></html>";
 }
 
@@ -109,7 +109,7 @@ $offlineIndex = <<<'HTMLINDEX'
 </head>
 <body>
 <h1>Strainlove offline search</h1>
-<div class="notice">Search runs fully in your browser using bundled data (<code>strains.js</code>/<code>strains.json</code>). No PHP or database server is needed.</div>
+<div class="notice">Search runs fully in your browser using bundled data (<code>strains.js</code>/<code>strains.json</code>) from the downloaded <code>.tar.gz</code> archive. No PHP or database server is needed.</div>
 <div class="container">
 <form id="search-form">
     <h3>Search filters</h3>
@@ -181,10 +181,15 @@ $offlineIndex = <<<'HTMLINDEX'
     const pager = document.getElementById('pager');
     let data = Array.isArray(window.STRAINS_DATA) ? window.STRAINS_DATA : [];
 
+    function showPlaceholder(message) {
+        tbody.innerHTML = `<tr><td colspan="7">${message}</td></tr>`;
+        pager.style.display = 'none';
+    }
+
     function loadData() {
         if (data.length) {
-            summaryEl.textContent = `${data.length} rows loaded.`;
-            render();
+            summaryEl.textContent = `${data.length} rows loaded. Enter filters and click Search to view results.`;
+            showPlaceholder('No search run yet.');
             return;
         }
 
@@ -192,8 +197,8 @@ $offlineIndex = <<<'HTMLINDEX'
             .then(resp => resp.json())
             .then(rows => {
                 data = rows;
-                summaryEl.textContent = `${data.length} rows loaded.`;
-                render();
+                summaryEl.textContent = `${data.length} rows loaded. Enter filters and click Search to view results.`;
+                showPlaceholder('No search run yet.');
             })
             .catch(err => {
                 summaryEl.textContent = 'Failed to load strains.json: ' + err;
@@ -287,8 +292,7 @@ $offlineIndex = <<<'HTMLINDEX'
 
     function render(pageReset=false) {
         if (!data.length) {
-            tbody.innerHTML = '<tr><td colspan="7">No data loaded.</td></tr>';
-            pager.style.display = 'none';
+            showPlaceholder('No data loaded.');
             return;
         }
 
@@ -323,22 +327,58 @@ $offlineIndex = <<<'HTMLINDEX'
         if (total > filters.limit) {
             pager.style.display = 'flex';
             pager.innerHTML = '';
+
+            const setPage = (p) => {
+                form.querySelector('input[name="page"]').value = p;
+                render();
+            };
+
+            const addLink = (p, label, isCurrent = false) => {
+                const a = document.createElement('a');
+                a.href = '#';
+                a.textContent = label ?? p;
+                if (isCurrent) {
+                    a.style.fontWeight = 'bold';
+                    a.setAttribute('aria-current', 'page');
+                    a.onclick = (e) => e.preventDefault();
+                } else {
+                    a.onclick = (e) => { e.preventDefault(); setPage(p); };
+                }
+                pager.appendChild(a);
+            };
+
             if (page > 1) {
-                const prev = document.createElement('a');
-                prev.href = '#';
-                prev.textContent = '« Prev';
-                prev.onclick = (e) => { e.preventDefault(); form.querySelector('input[name="page"]').value = page - 1; render(); };
-                pager.appendChild(prev);
+                addLink(page - 1, '« Prev');
             }
-            const span = document.createElement('span');
-            span.textContent = `Page ${page} of ${totalPages}`;
-            pager.appendChild(span);
+
+            const windowSize = 2;
+            const start = Math.max(1, page - windowSize);
+            const end = Math.min(totalPages, page + windowSize);
+
+            if (start > 1) {
+                addLink(1, '1');
+                if (start > 2) {
+                    const gap = document.createElement('span');
+                    gap.textContent = '…';
+                    pager.appendChild(gap);
+                }
+            }
+
+            for (let p = start; p <= end; p++) {
+                addLink(p, String(p), p === page);
+            }
+
+            if (end < totalPages) {
+                if (end < totalPages - 1) {
+                    const gap = document.createElement('span');
+                    gap.textContent = '…';
+                    pager.appendChild(gap);
+                }
+                addLink(totalPages, String(totalPages));
+            }
+
             if (offset + filters.limit < total) {
-                const next = document.createElement('a');
-                next.href = '#';
-                next.textContent = 'Next »';
-                next.onclick = (e) => { e.preventDefault(); form.querySelector('input[name="page"]').value = page + 1; render(); };
-                pager.appendChild(next);
+                addLink(page + 1, 'Next »');
             }
         } else {
             pager.style.display = 'none';
@@ -354,7 +394,10 @@ $offlineIndex = <<<'HTMLINDEX'
     resetBtn.addEventListener('click', function() {
         form.reset();
         form.querySelector('input[name="page"]').value = 1;
-        render(true);
+        showPlaceholder('No search run yet.');
+        summaryEl.textContent = data.length
+            ? `${data.length} rows loaded. Enter filters and click Search to view results.`
+            : 'Loading data...';
     });
 
     loadData();
