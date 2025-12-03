@@ -38,6 +38,7 @@ if (!is_dir($offlineDir) && !mkdir($offlineDir, 0700, true)) {
 
 $csvPath = $offlineDir . '/strains.csv';
 $jsonPath = $offlineDir . '/strains.json';
+$jsPath = $offlineDir . '/strains.js';
 $indexPath = $offlineDir . '/index.html';
 $notePath = $offlineDir . '/README.txt';
 
@@ -81,6 +82,7 @@ while ($row = $stmt->fetch(PDO::FETCH_ASSOC)) {
 }
 fclose($csvHandle);
 file_put_contents($jsonPath, json_encode($rows, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES));
+file_put_contents($jsPath, 'window.STRAINS_DATA = ' . json_encode($rows, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) . ';');
 
 // Offline index file (search-only frontend, static HTML + JS)
 $offlineIndex = <<<'HTMLINDEX'
@@ -106,7 +108,7 @@ $offlineIndex = <<<'HTMLINDEX'
 </head>
 <body>
 <h1>Strainlove offline search</h1>
-<div class="notice">Search runs fully in your browser using <code>strains.json</code>. No PHP or database server is needed.</div>
+<div class="notice">Search runs fully in your browser using bundled data (<code>strains.js</code>/<code>strains.json</code>). No PHP or database server is needed.</div>
 <div class="container">
 <form id="search-form">
     <h3>Search filters</h3>
@@ -161,6 +163,7 @@ $offlineIndex = <<<'HTMLINDEX'
 </div>
 </div>
 
+<script src="strains.js"></script>
 <script>
 (function() {
     const includeContainer = document.getElementById('include-terms');
@@ -175,10 +178,16 @@ $offlineIndex = <<<'HTMLINDEX'
     const summaryEl = document.getElementById('summary');
     const tbody = document.getElementById('results-body');
     const pager = document.getElementById('pager');
-    let data = [];
+    let data = Array.isArray(window.STRAINS_DATA) ? window.STRAINS_DATA : [];
 
     function loadData() {
-        fetch('strains.json')
+        if (data.length) {
+            summaryEl.textContent = `${data.length} rows loaded.`;
+            render();
+            return;
+        }
+
+        fetch('strains.json', { cache: 'no-store' })
             .then(resp => resp.json())
             .then(rows => {
                 data = rows;
@@ -337,6 +346,7 @@ $tarPath = $bundleRoot . '/strainlove_offline_bundle.tar';
 $phar = new PharData($tarPath);
 $phar->addFile($csvPath, 'offline/strains.csv');
 $phar->addFile($jsonPath, 'offline/strains.json');
+$phar->addFile($jsPath, 'offline/strains.js');
 $phar->addFile($indexPath, 'offline/index.html');
 $phar->addFile($notePath, 'offline/README.txt');
 $phar->compress(Phar::GZ);
