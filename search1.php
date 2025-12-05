@@ -19,7 +19,7 @@ $sql2 = null; // Initialize SQL variables as null
 $minNum = $_SESSION['minNum'] ?? ''; // Read minNum from session
 $maxNum = $_SESSION['maxNum'] ?? ''; // Read maxNum from session
 // Get search checkbox state from session as well, needed for highlighting
-$searchgenotype = $_SESSION['searchgenotype'] ?? 0;
+$searchgenotype = $_SESSION['searchgenotype'] ?? 1; // Default to Genotype checked
 $searchcomment = $_SESSION['searchcomment'] ?? 0;
 // Get terms from session too, needed for highlighting
 $term1 = $_SESSION['term1'] ?? '';

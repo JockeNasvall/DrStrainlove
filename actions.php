@@ -198,7 +198,7 @@ if ($_SERVER['REQUEST_METHOD'] == 'POST' && isset($_POST['form-type']) && $_POST
 		$_SESSION['sign1'] = '';
 		$_SESSION['minNum'] = ''; // Add this
 		$_SESSION['maxNum'] = ''; // Add this
-        $_SESSION['searchgenotype'] = 0; // Reset checkbox state
+        $_SESSION['searchgenotype'] = 1; // Reset checkbox state (Genotype checked by default)
         $_SESSION['searchcomment'] = 0; // Reset checkbox state
 
 
